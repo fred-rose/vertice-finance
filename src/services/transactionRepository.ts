@@ -5,17 +5,45 @@ import type {
 } from "../types/finance";
 import { defaultSettings } from "../data/catalog";
 import {
+  sameBackupSnapshot,
+  validateBackupSnapshot,
+} from "../features/transactions/backup";
+import {
   transactionSignature,
   validateSettings,
   validateTransaction,
 } from "../features/transactions/validation";
 export interface TransactionRepository {
   load(): Promise<FinanceSnapshot>;
+  readForBackup(): Promise<FinanceSnapshot>;
+  restore(
+    snapshot: FinanceSnapshot,
+    safetySnapshot: FinanceSnapshot,
+  ): Promise<FinanceSnapshot>;
   save(transaction: Transaction): Promise<void>;
   remove(id: string): Promise<void>;
   import(items: Transaction[], skipDuplicates: boolean): Promise<number>;
   saveSettings(settings: FinanceSettings): Promise<void>;
   removeDemo(): Promise<void>;
+}
+export class RestoreError extends Error {
+  constructor(
+    public readonly phase: "prepare" | "changed" | "write" | "verify",
+    cause?: unknown,
+  ) {
+    const messages = {
+      prepare:
+        "Não foi possível preparar a restauração. Nenhum dado foi substituído.",
+      changed:
+        "Os dados mudaram desde o backup de segurança. Baixe uma nova cópia antes de restaurar.",
+      write:
+        "A restauração não foi concluída. A transação foi revertida e os dados anteriores foram preservados. Verifique o espaço disponível e tente novamente.",
+      verify:
+        "A gravação ocorreu, mas não foi possível verificar a restauração. Não continue editando. Guarde o backup pré-restore e use essa cópia para recuperação manual. Nenhuma segunda restauração foi executada.",
+    };
+    super(messages[phase], { cause });
+    this.name = "RestoreError";
+  }
 }
 let database: Promise<IDBDatabase> | undefined;
 function openDatabase(): Promise<IDBDatabase> {
@@ -97,7 +125,7 @@ function resolveSettings(
   value: FinanceSettings | null | undefined,
 ): FinanceSettings {
   try {
-    return validateSettings(value ?? defaultSettings());
+    return validateSettings(value ?? defaultSettings(), true);
   } catch (error) {
     throw repositoryError(error);
   }
@@ -123,7 +151,15 @@ function complete(tx: IDBTransaction) {
     done,
     abort(error: unknown) {
       originalError = error;
-      tx.abort();
+      try {
+        tx.abort();
+      } catch (cause) {
+        // An injected/native abort may already be pending; onabort still settles done.
+        if (!(
+          cause instanceof DOMException && cause.name === "InvalidStateError"
+        ))
+          throw cause;
+      }
     },
   };
 }
@@ -137,8 +173,88 @@ export const transactionRepository: TransactionRepository = {
     await done;
     const settings = resolveSettings(config.result);
     const transactions: Transaction[] = rows.result;
-    transactions.forEach((t) => validateTransaction(t, settings));
+    const accountIds = new Set(settings.accounts.map((a) => a.id));
+    const categoryTypes = new Map(
+      settings.categories.map((c) => [c.id, c.type]),
+    );
+    transactions.forEach((t) =>
+      validateTransaction(t, settings, {
+        structural: true,
+        accountIds,
+        categoryTypes,
+      }),
+    );
     return { transactions, settings };
+  },
+  async readForBackup() {
+    const db = await openDatabase();
+    const tx = db.transaction(["transactions", "settings"]);
+    const { done } = complete(tx);
+    const rows = tx.objectStore("transactions").getAll();
+    const config = tx.objectStore("settings").get("personal");
+    await done;
+    // Deliberately no resolveSettings/defaults: a recovery copy must be real.
+    return validateBackupSnapshot({
+      transactions: rows.result,
+      settings: config.result,
+    });
+  },
+  async restore(snapshot, safetySnapshot) {
+    let prepared: FinanceSnapshot, previous: FinanceSnapshot;
+    try {
+      // Own the prepared input before yielding to another task/tab.
+      prepared = validateBackupSnapshot(structuredClone(snapshot));
+      previous = validateBackupSnapshot(structuredClone(safetySnapshot));
+    } catch (cause) {
+      throw new RestoreError("prepare", cause);
+    }
+    try {
+      const db = await openDatabase();
+      const tx = db.transaction(["transactions", "settings"], "readwrite");
+      const { done, abort } = complete(tx);
+      try {
+        const store = tx.objectStore("transactions");
+        const configStore = tx.objectStore("settings");
+        const rows = store.getAll();
+        const config = configStore.get("personal");
+        let pending = 2;
+        const replace = () => {
+          if (--pending !== 0) return;
+          try {
+            if (
+              !sameBackupSnapshot(previous, {
+                transactions: rows.result,
+                settings: config.result,
+              })
+            )
+              throw new RestoreError("changed");
+            store.clear();
+            for (const row of prepared.transactions) store.add(row);
+            configStore.put(prepared.settings, "personal");
+          } catch (cause) {
+            abort(cause);
+          }
+        };
+        rows.onsuccess = replace;
+        config.onsuccess = replace;
+      } catch (cause) {
+        abort(cause);
+      }
+      await done;
+    } catch (cause) {
+      if (cause instanceof RestoreError) throw cause;
+      throw new RestoreError("write", cause);
+    }
+    // This is a new read through the real repository, after the commit.
+    // Never compensate a completed commit with a second destructive write.
+    try {
+      const persisted = await transactionRepository.readForBackup();
+      if (!sameBackupSnapshot(prepared, persisted))
+        throw new Error("RESTORE_SNAPSHOT_MISMATCH");
+      return persisted;
+    } catch (cause) {
+      throw new RestoreError("verify", cause);
+    }
   },
   async save(transaction) {
     const db = await openDatabase();
@@ -225,7 +341,7 @@ export const transactionRepository: TransactionRepository = {
     rows.onsuccess = () => {
       try {
         (rows.result as Transaction[]).forEach((t) =>
-          validateTransaction(t, settings),
+          validateTransaction(t, settings, { structural: true }),
         );
         tx.objectStore("settings").put(settings, "personal");
       } catch (error) {

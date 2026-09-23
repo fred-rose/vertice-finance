@@ -82,7 +82,19 @@ O processamento ocorre no navegador. XLSX usa [ExcelJS](https://github.com/excel
 
 ### Exportação
 
-Transações exporta todos os resultados do filtro em CSV, reimportável pelo mesmo assistente. Configurações permite exportar todas as transações e uma cópia JSON com contas, categorias, metas e lançamentos. A restauração automática desse JSON ainda não está implementada; ele serve como cópia completa para recuperação técnica. O CSV não inclui saldos iniciais nem configurações.
+Transações exporta todos os resultados do filtro em CSV, reimportável pelo mesmo assistente. Configurações permite exportar todas as transações e uma cópia JSON v2 com contas, categorias, metas, compromissos, saldos iniciais e configurações. O CSV não inclui saldos iniciais nem configurações.
+
+### Restaurar backup JSON v2
+
+Em **Configurações → Restaurar backup JSON**, selecione o arquivo e confira a prévia. O conteúdo é validado localmente, sem upload. Feche outras abas e salve suas edições antes de continuar: a restauração substitui os dados salvos neste navegador.
+
+1. Clique em **Baixar backup de segurança**. A cópia completa do estado atual recebe o nome `vertice-backup-pre-restore-<data>.json`.
+2. Confira o download e guarde esse arquivo. Só depois a ação **Restaurar este backup** fica disponível. O navegador não permite provar que o arquivo foi fisicamente guardado pelo usuário.
+3. Confirme a restauração e aguarde a verificação. Cancelar, fechar ou trocar o arquivo antes da confirmação não altera o banco.
+
+Transações e configurações são substituídas na mesma transação IndexedDB. Falha durante a escrita aborta o conjunto; alteração dos dados desde a cópia de segurança exige baixar uma nova cópia. Após o commit, o aplicativo relê o repository e compara todo o estado suportado, preservando IDs, referências e campos. Uma divergência pós-commit exige recuperação manual pelo backup de segurança; não há outra escrita automática.
+
+Datas civis futuras estruturalmente válidas podem ser restauradas e lidas; os comandos de cadastro/edição continuam com suas regras de data. A cópia de segurança não utiliza configurações padrão para preencher dados ausentes: se o banco atual não permite gerar um JSON v2 íntegro, o restore fica bloqueado. Exportação bruta de base parcialmente inválida está adiada para A2. Detalhes, testes e limites em [IMPLEMENTACAO-A0-A1.md](IMPLEMENTACAO-A0-A1.md).
 
 ## Persistência e migração
 
@@ -133,4 +145,4 @@ Não há ESLint configurado. A verificação disponível combina TypeScript estr
 
 ## Próximas etapas
 
-Recorrência automática, restauração completa de backup, gestão dedicada de orçamentos/metas e patrimônio podem evoluir depois da validação do uso pessoal. OFX, backend e integrações bancárias ficam para fases posteriores.
+Recorrência automática, recuperação de bases parcialmente inválidas, proteção geral contra edições concorrentes e gestão dedicada de orçamentos/metas podem evoluir depois. Patrimônio, OFX, backend e integrações bancárias ficam para fases posteriores.

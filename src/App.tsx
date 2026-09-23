@@ -13,6 +13,7 @@ import { TransactionsPage } from "./components/transactions/TransactionsPage";
 import { AddTransactionModal } from "./components/transactions/AddTransactionModal";
 import { ImportModal } from "./components/transactions/ImportModal";
 import { SettingsPage } from "./components/settings/SettingsPage";
+import { RestoreBackupDialog } from "./components/settings/RestoreBackupDialog";
 import { Dialog } from "./components/ui/Dialog";
 import { useTransactions } from "./hooks/useTransactions";
 import { usePage } from "./hooks/usePage";
@@ -28,10 +29,17 @@ export default function App() {
     null,
   );
   const [importing, setImporting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [notice, setNotice] = useState("");
   const [removeDemo, setRemoveDemo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  useEffect(() => {
+    if (!finance.restoreVersion) return;
+    setEditor(null);
+    setImporting(false);
+    setRemoveDemo(false);
+  }, [finance.restoreVersion]);
   const title =
     page === "overview"
       ? "Visão geral"
@@ -194,9 +202,11 @@ export default function App() {
               />
             ) : (
               <SettingsPage
+                key={finance.restoreVersion}
                 settings={finance.settings}
                 transactions={finance.transactions}
                 onSave={finance.saveSettings}
+                onRestore={() => setRestoring(true)}
               />
             )}
             <footer className="page-footer">
@@ -228,6 +238,19 @@ export default function App() {
           transaction={editor.transaction}
           onSave={save}
           onClose={() => setEditor(null)}
+        />
+      )}
+      {restoring && (
+        <RestoreBackupDialog
+          readForBackup={finance.readForBackup}
+          onClose={() => setRestoring(false)}
+          onRestore={async (next, previous) => {
+            await finance.restoreBackup(next, previous);
+            setRestoring(false);
+            setNotice(
+              "Backup restaurado e verificado. Seus dados foram recuperados.",
+            );
+          }}
         />
       )}
       {importing && (

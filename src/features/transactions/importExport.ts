@@ -260,13 +260,16 @@ export function previewImport(
   });
   return results;
 }
-function download(content: string, name: string, type: string) {
+export function download(content: string, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 export function downloadTransactions(
   items: Transaction[],

@@ -14,16 +14,21 @@ export function parseAmount(text: string, decimal: "," | "." = ","): number {
 }
 export function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T12:00:00`);
+  const date = new Date(`${value}T12:00:00Z`);
   return (
     Number.isFinite(date.getTime()) &&
-    localDate(date) === value &&
+    date.toISOString().slice(0, 10) === value &&
     value >= "1900-01-01"
   );
 }
 export function validateTransaction(
   input: NewTransaction,
   settings: FinanceSettings,
+  options: {
+    structural?: boolean;
+    accountIds?: ReadonlySet<string>;
+    categoryTypes?: ReadonlyMap<string, string>;
+  } = {},
 ): NewTransaction {
   if (!["income", "expense", "transfer"].includes(input.type))
     throw new Error("Tipo de transação inválido.");
@@ -38,16 +43,24 @@ export function validateTransaction(
     );
   if (!input.description?.trim() || input.description.trim().length > 100)
     throw new Error("A descrição deve ter entre 1 e 100 caracteres.");
-  if (!validDate(input.date) || input.date > localDate())
+  if (
+    !validDate(input.date) ||
+    (!options.structural && input.date > localDate())
+  )
     throw new Error("Informe uma data válida, até hoje.");
-  if (!settings.accounts.some((a) => a.id === input.accountId))
+  const hasAccount = (id: string | undefined) =>
+    id !== undefined &&
+    (options.accountIds
+      ? options.accountIds.has(id)
+      : settings.accounts.some((a) => a.id === id));
+  if (!hasAccount(input.accountId))
     throw new Error("Selecione uma conta válida.");
   if (typeof input.recurring !== "boolean")
     throw new Error("Marcação de recorrência inválida.");
   if (input.type === "transfer") {
     if (
       input.destinationAccountId === input.accountId ||
-      !settings.accounts.some((a) => a.id === input.destinationAccountId)
+      !hasAccount(input.destinationAccountId)
     )
       throw new Error("Selecione uma conta de destino diferente da origem.");
     return {
@@ -58,9 +71,11 @@ export function validateTransaction(
     };
   }
   if (
-    !settings.categories.some(
-      (c) => c.id === input.categoryId && c.type === input.type,
-    )
+    !(options.categoryTypes
+      ? options.categoryTypes.get(input.categoryId) === input.type
+      : settings.categories.some(
+          (c) => c.id === input.categoryId && c.type === input.type,
+        ))
   )
     throw new Error("Selecione uma categoria compatível com o tipo.");
   return {
@@ -70,7 +85,10 @@ export function validateTransaction(
     amount: Math.round(input.amount * 100) / 100,
   };
 }
-export function validateSettings(settings: FinanceSettings): FinanceSettings {
+export function validateSettings(
+  settings: FinanceSettings,
+  structural = false,
+): FinanceSettings {
   const monetary = (n: number, negative = false) =>
     Number.isFinite(n) &&
     (negative || n >= 0) &&
@@ -94,7 +112,7 @@ export function validateSettings(settings: FinanceSettings): FinanceSettings {
       !["checking", "savings", "cash"].includes(a.type) ||
       !monetary(a.initialBalance, true) ||
       !validDate(a.initialBalanceDate) ||
-      a.initialBalanceDate > localDate()
+      (!structural && a.initialBalanceDate > localDate())
     )
       throw new Error("Revise nome, saldo e data inicial das contas.");
   for (const c of settings.categories)

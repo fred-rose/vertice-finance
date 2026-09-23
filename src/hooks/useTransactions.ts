@@ -9,6 +9,7 @@ import { defaultSettings } from "../data/catalog";
 import { validateTransaction } from "../features/transactions/validation";
 import {
   transactionRepository,
+  RestoreError,
   type TransactionRepository,
 } from "../services/transactionRepository";
 export function useTransactions(
@@ -20,6 +21,7 @@ export function useTransactions(
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [restoreVersion, setRestoreVersion] = useState(0);
   const sequence = useRef(0);
   const channel = useRef<BroadcastChannel | null>(null);
   const refresh = useCallback(async () => {
@@ -48,7 +50,11 @@ export function useTransactions(
         ? new BroadcastChannel("vertice-updates")
         : null;
     channel.current = bus;
-    if (bus) bus.onmessage = () => void refresh();
+    if (bus)
+      bus.onmessage = async (event) => {
+        await refresh();
+        if (event.data === "restored") setRestoreVersion((v) => v + 1);
+      };
     const focus = () => void refresh();
     window.addEventListener("focus", focus);
     return () => {
@@ -102,10 +108,33 @@ export function useTransactions(
     await repository.removeDemo();
     await changed();
   }
+  async function restoreBackup(
+    next: FinanceSnapshot,
+    previous: FinanceSnapshot,
+  ) {
+    try {
+      const persisted = await repository.restore(next, previous);
+      sequence.current++;
+      setSnapshot(persisted);
+      setError("");
+      setRestoreVersion((v) => v + 1);
+      channel.current?.postMessage("restored");
+    } catch (cause) {
+      if (cause instanceof RestoreError && cause.phase === "verify") {
+        channel.current?.postMessage("restored");
+        sequence.current++;
+        setError(cause.message);
+      }
+      throw cause;
+    }
+  }
   return {
     ...snapshot,
     loading,
     error,
+    restoreVersion,
+    readForBackup: () => repository.readForBackup(),
+    restoreBackup,
     refresh,
     saveTransaction,
     removeTransaction,

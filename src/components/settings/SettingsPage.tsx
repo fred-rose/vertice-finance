@@ -13,10 +13,12 @@ export function SettingsPage({
   settings,
   transactions,
   onSave,
+  onRestore,
 }: {
   settings: FinanceSettings;
   transactions: Transaction[];
   onSave: (settings: FinanceSettings) => Promise<void>;
+  onRestore: () => void;
 }) {
   const [draft, setDraft] = useState(() => structuredClone(settings));
   const [busy, setBusy] = useState(false);
@@ -536,10 +538,18 @@ export function SettingsPage({
         <p>
           Os dados ficam neste navegador. Exporte transações em CSV para
           reimportar pela tela Transações. O arquivo JSON também guarda contas,
-          orçamentos e metas; a restauração automática desse arquivo ainda não
-          está disponível.
+          orçamentos e metas. Restaure um backup JSON v2 para recuperar esse
+          estado completo.
         </p>
         <div className="row-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={onRestore}
+          >
+            Restaurar backup JSON
+          </button>
           <button
             type="button"
             className="secondary-button"

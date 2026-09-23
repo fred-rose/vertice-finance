@@ -1,6 +1,9 @@
 // Test-only entry point: bundle real modules into an isolated browser context.
 export { transactionRepository } from "../../src/services/transactionRepository";
 export { defaultSettings } from "../../src/data/catalog";
+export * from "../../src/features/transactions/backup";
+export { RestoreError } from "../../src/services/transactionRepository";
+export { backupFixture } from "./backupFixture";
 export * from "../../src/features/dashboard/calculations";
 import type { Transaction } from "../../src/types/finance";
 export function transaction(patch: Partial<Transaction> = {}): Transaction {
