@@ -10,6 +10,7 @@ import {
 import { download } from "../../features/transactions/importExport";
 import { RestoreError } from "../../services/transactionRepository";
 import { Dialog } from "../ui/Dialog";
+import { RecoveryGuidance } from "./LocalDataRecovery";
 
 export function RestoreBackupDialog({
   readForBackup,
@@ -28,6 +29,7 @@ export function RestoreBackupDialog({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [verificationFailed, setVerificationFailed] = useState(false);
+  const [safetyFailed, setSafetyFailed] = useState(false);
   const active = useRef(false);
   const preview = useMemo(
     () => (backup ? backupPreview(backup) : null),
@@ -38,6 +40,7 @@ export function RestoreBackupDialog({
     active.current = true;
     setBackup(null);
     setSafety(null);
+    setSafetyFailed(false);
     setError("");
     setBusy("Lendo e validando o backup…");
     try {
@@ -61,6 +64,7 @@ export function RestoreBackupDialog({
     if (!backup || active.current) return;
     active.current = true;
     setSafety(null);
+    setSafetyFailed(false);
     setError("");
     setBusy("Preparando o backup de segurança…");
     try {
@@ -73,6 +77,7 @@ export function RestoreBackupDialog({
       );
       setSafety(current);
     } catch {
+      setSafetyFailed(true);
       setError(
         "Não foi possível gerar ou iniciar o download do backup de segurança. A restauração está bloqueada; seus dados não foram substituídos. Verifique o download e a integridade dos dados atuais.",
       );
@@ -152,6 +157,7 @@ export function RestoreBackupDialog({
           baixado e guarde-o até verificar que a restauração ficou correta.
         </p>
       )}
+      {safetyFailed && <RecoveryGuidance />}
       <div className="dialog-actions row-actions">
         <button
           type="button"

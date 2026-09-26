@@ -14,6 +14,7 @@ import { AddTransactionModal } from "./components/transactions/AddTransactionMod
 import { ImportModal } from "./components/transactions/ImportModal";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { RestoreBackupDialog } from "./components/settings/RestoreBackupDialog";
+import { LocalDataRecovery } from "./components/settings/LocalDataRecovery";
 import { Dialog } from "./components/ui/Dialog";
 import { useTransactions } from "./hooks/useTransactions";
 import { usePage } from "./hooks/usePage";
@@ -21,6 +22,7 @@ import { monthKey, monthLabel } from "./utils/format";
 import type { NewTransaction, Transaction } from "./types/finance";
 export default function App() {
   const finance = useTransactions();
+  const snapshot = finance.snapshot;
   const page = usePage();
   const [selected, setSelected] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -40,6 +42,12 @@ export default function App() {
     setImporting(false);
     setRemoveDemo(false);
   }, [finance.restoreVersion]);
+  useEffect(() => {
+    if (snapshot) return;
+    setEditor(null);
+    setImporting(false);
+    setRemoveDemo(false);
+  }, [snapshot]);
   const title =
     page === "overview"
       ? "Visão geral"
@@ -59,9 +67,8 @@ export default function App() {
     setSelected(new Date(`${input.date.slice(0, 7)}-01T12:00:00`));
     setNotice("Transação salva. Sua visão geral está atualizada.");
   }
-  const demoCount = finance.transactions.filter(
-    (t) => t.source === "demo",
-  ).length;
+  const demoCount =
+    snapshot?.transactions.filter((t) => t.source === "demo").length ?? 0;
   return (
     <DashboardLayout page={page}>
       <header className="topbar">
@@ -71,7 +78,12 @@ export default function App() {
         </span>
         <span className="topbar-right">
           <span className="status-dot" />
-          Salvo neste navegador<span className="avatar small-avatar">P</span>
+          {snapshot
+            ? "Salvo neste navegador"
+            : finance.loading
+              ? "Carregando dados locais"
+              : "Dados locais indisponíveis"}
+          <span className="avatar small-avatar">P</span>
         </span>
       </header>
       <motion.div
@@ -137,7 +149,7 @@ export default function App() {
             {page !== "settings" && (
               <button
                 className={`primary-button ${page === "overview" ? "desktop-add" : ""}`}
-                disabled={finance.loading || !!finance.error}
+                disabled={!snapshot || finance.loading || !!finance.error}
                 onClick={() => setEditor({})}
               >
                 <Plus size={18} />
@@ -151,16 +163,12 @@ export default function App() {
             Preparando sua visão financeira…
           </div>
         ) : finance.error ? (
-          <div className="panel empty-state" role="alert">
-            {finance.error}
-            <button
-              className="secondary-button"
-              onClick={() => void finance.refresh()}
-            >
-              Tentar novamente
-            </button>
-          </div>
-        ) : (
+          <LocalDataRecovery
+            error={finance.error}
+            onRetry={() => void finance.refresh()}
+            onRestore={() => setRestoring(true)}
+          />
+        ) : snapshot ? (
           <>
             {demoCount > 0 && (
               <div className="demo-banner">
@@ -181,16 +189,16 @@ export default function App() {
             )}
             {page === "overview" ? (
               <OverviewPage
-                transactions={finance.transactions}
-                settings={finance.settings}
+                transactions={snapshot.transactions}
+                settings={snapshot.settings}
                 selected={selected}
                 onAdd={() => setEditor({})}
                 onImport={() => setImporting(true)}
               />
             ) : page === "transactions" ? (
               <TransactionsPage
-                transactions={finance.transactions}
-                settings={finance.settings}
+                transactions={snapshot.transactions}
+                settings={snapshot.settings}
                 onEdit={(transaction) => setEditor({ transaction })}
                 onDelete={async (id) => {
                   await finance.removeTransaction(id);
@@ -203,8 +211,8 @@ export default function App() {
             ) : (
               <SettingsPage
                 key={finance.restoreVersion}
-                settings={finance.settings}
-                transactions={finance.transactions}
+                settings={snapshot.settings}
+                transactions={snapshot.transactions}
                 onSave={finance.saveSettings}
                 onRestore={() => setRestoring(true)}
               />
@@ -217,7 +225,7 @@ export default function App() {
               <span>Dados locais · Exporte uma cópia nas configurações.</span>
             </footer>
           </>
-        )}
+        ) : null}
       </motion.div>
       {notice && (
         <div className="toast" role="status">
@@ -232,9 +240,9 @@ export default function App() {
           </button>
         </div>
       )}
-      {editor && (
+      {snapshot && editor && (
         <AddTransactionModal
-          settings={finance.settings}
+          settings={snapshot.settings}
           transaction={editor.transaction}
           onSave={save}
           onClose={() => setEditor(null)}
@@ -253,15 +261,15 @@ export default function App() {
           }}
         />
       )}
-      {importing && (
+      {snapshot && importing && (
         <ImportModal
-          settings={finance.settings}
-          transactions={finance.transactions}
+          settings={snapshot.settings}
+          transactions={snapshot.transactions}
           onImport={finance.importTransactions}
           onClose={() => setImporting(false)}
         />
       )}
-      {removeDemo && (
+      {snapshot && removeDemo && (
         <Dialog
           title="Remover dados demonstrativos?"
           onClose={() => setRemoveDemo(false)}

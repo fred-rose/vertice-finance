@@ -1,3 +1,4 @@
+import { rawLocal, seedLocal } from "./helpers/localData";
 import { expect, test } from "@playwright/test";
 import { build } from "vite";
 import { fileURLToPath } from "node:url";
@@ -128,46 +129,52 @@ test("migração v1 preserva origem e destino de transferência e é estável ao
   ).toEqual(snapshot);
 });
 
-test("settings personal ausente: carregar, salvar e importar usam o mesmo fallback validado", async ({
+// A2a changes the old fallback contract: a precreated v2 is not a real bootstrap.
+test("settings personal ausente em v2: bloqueia load/save/import e preserva stores", async ({
   page,
 }) => {
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open("vertice-finance", 2);
-      req.onupgradeneeded = () => {
-        req.result.createObjectStore("transactions", { keyPath: "id" });
-        req.result.createObjectStore("settings");
-      };
-      req.onsuccess = () => {
-        req.result.close();
-        resolve();
-      };
-      req.onerror = () => reject(req.error);
-    });
+  await seedLocal(page, {
+    transactions: [],
+    settings: undefined,
+    present: false,
   });
-  const result = await page.evaluate(async () => {
+  const before = await rawLocal(page);
+  const errors = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    const initial = await r.load();
-    await r.save(transaction({ description: "Manual" }));
-    const count = await r.import(
-      [transaction({ description: "Importado", source: "import" })],
-      true,
-    );
-    return { initial, count, after: await r.load() };
+    const errors: string[] = [];
+    for (const operation of [
+      () => r.load(),
+      () => r.save(transaction()),
+      () => r.import([transaction()], true),
+    ]) {
+      try {
+        await operation();
+        errors.push("accepted");
+      } catch (e) {
+        errors.push((e as { code: string }).code);
+      }
+    }
+    return errors;
   });
-  expect(result.initial.transactions).toEqual([]);
-  expect(result.count).toBe(1);
-  expect(result.after.transactions).toHaveLength(2);
-  expect(result.after.settings).toEqual(result.initial.settings);
+  expect(errors).toEqual([
+    "missing-settings",
+    "missing-settings",
+    "missing-settings",
+  ]);
+  expect(await rawLocal(page)).toEqual(before);
   await page.reload();
   await page.evaluate((code) => (0, eval)(code), bundle);
   expect(
-    await page.evaluate(
-      async () =>
-        (await window.financeAudit.transactionRepository.load()).transactions
-          .length,
-    ),
-  ).toBe(2);
+    await page.evaluate(async () => {
+      try {
+        await window.financeAudit.transactionRepository.load();
+        return "accepted";
+      } catch (e) {
+        return (e as { code: string }).code;
+      }
+    }),
+  ).toBe("missing-settings");
+  expect(await rawLocal(page)).toEqual(before);
 });
 
 for (const [field, value, message] of [

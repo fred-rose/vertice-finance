@@ -104,7 +104,11 @@ Dados demonstrativos antigos continuam visíveis até a pessoa clicar em **Remov
 
 O estado muda após a confirmação da gravação. Importações são atômicas. Outras abas recebem atualização via BroadcastChannel e há releitura ao retornar o foco. Dados continuam locais ao navegador; exporte cópias para protegê-los contra limpeza de dados do navegador.
 
-Carregar, salvar e importar usam o mesmo fallback validado quando a chave `personal` está ausente. Configurações existentes inválidas são rejeitadas sem substituição silenciosa. Erros de validação chegam aos formulários; falhas de escrita aguardam o rollback e preservam a causa técnica no erro. Um erro no meio da importação reverte todo o lote, preservando os registros anteriores.
+Carregar exige configurações `personal` realmente persistidas e um snapshot estruturalmente válido. Banco v2 existente sem essa chave, com valor inválido ou registros corrompidos não recebe defaults; salvar, importar e editar configurações também rejeitam esse estado. Defaults são persistidos na criação real do banco, preservando a compatibilidade do migrador v1 existente. Erros de validação chegam aos formulários; falhas de escrita aguardam o rollback e preservam a causa técnica no erro. Um erro no meio da importação reverte todo o lote, preservando os registros anteriores.
+
+Quando a leitura falha, todas as rotas mostram recuperação, sem saldos, métricas ou formulários financeiros. Use **Tentar novamente** para reler ou **Restaurar backup JSON** para abrir a prévia. A restauração continua exigindo uma cópia de segurança válida dos dados atuais: uma base inválida permanece protegida contra substituição.
+
+Preserve o perfil/origem atual. Se já possuir backup JSON v2 válido, abra o app em outro perfil de navegador limpo ou outro dispositivo, inicialize normalmente e restaure ali. Isso não mescla dados nem recupera alterações posteriores ao backup. Sem backup válido, é necessária análise/extração técnica preservando a base. A2a não oferece reset, reparação automática ou restauração forçada. Detalhes e validação: [IMPLEMENTACAO-A2A.md](IMPLEMENTACAO-A2A.md).
 
 Exclusões e remoção da demonstração também preservam a causa original das falhas e exibem mensagens úteis nos diálogos. Falha durante a remoção da demonstração reverte as exclusões do lote inteiro. Datas numéricas fora do intervalo válido de importação recebem a mesma orientação de data inválida das demais linhas.
 

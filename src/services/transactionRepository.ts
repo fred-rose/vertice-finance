@@ -26,6 +26,21 @@ export interface TransactionRepository {
   saveSettings(settings: FinanceSettings): Promise<void>;
   removeDemo(): Promise<void>;
 }
+export class LocalReadError extends Error {
+  constructor(
+    public readonly code:
+      "missing-settings" | "invalid-snapshot" | "storage-unavailable",
+    cause?: unknown,
+  ) {
+    super(
+      code === "storage-unavailable"
+        ? "Não foi possível acessar os dados locais. Tente novamente; saldos e configurações estão indisponíveis."
+        : "Não foi possível validar os dados locais. Seus registros foram preservados; saldos e configurações estão indisponíveis.",
+      { cause },
+    );
+    this.name = "LocalReadError";
+  }
+}
 export class RestoreError extends Error {
   constructor(
     public readonly phase: "prepare" | "changed" | "write" | "verify",
@@ -57,6 +72,8 @@ function openDatabase(): Promise<IDBDatabase> {
         db.createObjectStore("transactions", { keyPath: "id" });
       if (!db.objectStoreNames.contains("settings"))
         db.createObjectStore("settings").put(defaultSettings(), "personal");
+      // Defaults are persisted only when creating the store: real bootstrap
+      // or the existing v1 migration. Never repair an already-open v2 database.
       // Preserve v1 records; new databases start without demonstration data.
       const cursor = request
         .transaction!.objectStore("transactions")
@@ -91,7 +108,11 @@ function openDatabase(): Promise<IDBDatabase> {
     };
     request.onerror = () => {
       database = undefined;
-      reject(new Error("Não foi possível abrir seus dados locais."));
+      reject(
+        new Error("Não foi possível abrir seus dados locais.", {
+          cause: request.error,
+        }),
+      );
     };
     request.onblocked = () => {
       blocked = true;
@@ -121,13 +142,65 @@ function repositoryError(error: unknown): Error {
     { cause: error },
   );
 }
-function resolveSettings(
-  value: FinanceSettings | null | undefined,
-): FinanceSettings {
+function validateLocalSnapshot(raw: {
+  transactions: unknown;
+  settings: unknown;
+  personalPresent: boolean;
+}): FinanceSnapshot {
+  if (!raw.personalPresent) throw new LocalReadError("missing-settings");
   try {
-    return validateSettings(value ?? defaultSettings(), true);
-  } catch (error) {
-    throw repositoryError(error);
+    return validateBackupSnapshot(raw);
+  } catch (cause) {
+    throw new LocalReadError("invalid-snapshot", cause);
+  }
+}
+// Queue all reads together in the caller's transaction. Writes stay in the
+// final request callback, without yielding outside the active IDB transaction.
+function snapshotRequests(tx: IDBTransaction) {
+  const rows = tx.objectStore("transactions").getAll();
+  const config = tx.objectStore("settings").get("personal");
+  const presence = tx.objectStore("settings").count("personal");
+  const result = () => ({
+    transactions: rows.result as unknown,
+    settings: config.result as unknown,
+    personalPresent: presence.result === 1,
+  });
+  return { rows, config, presence, result };
+}
+async function readLocalSnapshot() {
+  const db = await openDatabase();
+  const tx = db.transaction(["transactions", "settings"]);
+  const { done, abort } = complete(tx);
+  let requests: ReturnType<typeof snapshotRequests> | undefined;
+  try {
+    requests = snapshotRequests(tx);
+  } catch (cause) {
+    abort(cause);
+  }
+  await done;
+  return requests!.result();
+}
+function withValidSnapshot(
+  tx: IDBTransaction,
+  abort: (cause: unknown) => void,
+  action: (snapshot: FinanceSnapshot) => void,
+) {
+  try {
+    const requests = snapshotRequests(tx);
+    let pending = 3;
+    const ready = () => {
+      if (--pending) return;
+      try {
+        action(validateLocalSnapshot(requests.result()));
+      } catch (cause) {
+        abort(cause);
+      }
+    };
+    requests.rows.onsuccess = ready;
+    requests.config.onsuccess = ready;
+    requests.presence.onsuccess = ready;
+  } catch (cause) {
+    abort(cause);
   }
 }
 function complete(tx: IDBTransaction) {
@@ -165,39 +238,16 @@ function complete(tx: IDBTransaction) {
 }
 export const transactionRepository: TransactionRepository = {
   async load() {
-    const db = await openDatabase();
-    const tx = db.transaction(["transactions", "settings"]);
-    const { done } = complete(tx);
-    const rows = tx.objectStore("transactions").getAll();
-    const config = tx.objectStore("settings").get("personal");
-    await done;
-    const settings = resolveSettings(config.result);
-    const transactions: Transaction[] = rows.result;
-    const accountIds = new Set(settings.accounts.map((a) => a.id));
-    const categoryTypes = new Map(
-      settings.categories.map((c) => [c.id, c.type]),
-    );
-    transactions.forEach((t) =>
-      validateTransaction(t, settings, {
-        structural: true,
-        accountIds,
-        categoryTypes,
-      }),
-    );
-    return { transactions, settings };
+    try {
+      return validateLocalSnapshot(await readLocalSnapshot());
+    } catch (cause) {
+      if (cause instanceof LocalReadError) throw cause;
+      throw new LocalReadError("storage-unavailable", cause);
+    }
   },
   async readForBackup() {
-    const db = await openDatabase();
-    const tx = db.transaction(["transactions", "settings"]);
-    const { done } = complete(tx);
-    const rows = tx.objectStore("transactions").getAll();
-    const config = tx.objectStore("settings").get("personal");
-    await done;
-    // Deliberately no resolveSettings/defaults: a recovery copy must be real.
-    return validateBackupSnapshot({
-      transactions: rows.result,
-      settings: config.result,
-    });
+    // A recovery copy must be real; retain A1's strict validation contract.
+    return validateBackupSnapshot(await readLocalSnapshot());
   },
   async restore(snapshot, safetySnapshot) {
     let prepared: FinanceSnapshot, previous: FinanceSnapshot;
@@ -260,23 +310,15 @@ export const transactionRepository: TransactionRepository = {
     const db = await openDatabase();
     const tx = db.transaction(["transactions", "settings"], "readwrite");
     const { done, abort } = complete(tx);
-    const config = tx.objectStore("settings").get("personal");
-    config.onsuccess = () => {
-      try {
-        const valid = validateTransaction(
-          transaction,
-          resolveSettings(config.result),
-        );
-        tx.objectStore("transactions").put({
-          ...valid,
-          id: transaction.id,
-          createdAt: transaction.createdAt,
-          source: transaction.source,
-        });
-      } catch (error) {
-        abort(error);
-      }
-    };
+    withValidSnapshot(tx, abort, ({ settings }) => {
+      const valid = validateTransaction(transaction, settings);
+      tx.objectStore("transactions").put({
+        ...valid,
+        id: transaction.id,
+        createdAt: transaction.createdAt,
+        source: transaction.source,
+      });
+    });
     await done;
   },
   async remove(id) {
@@ -294,41 +336,24 @@ export const transactionRepository: TransactionRepository = {
     const db = await openDatabase();
     const tx = db.transaction(["transactions", "settings"], "readwrite");
     const { done, abort } = complete(tx);
-    const config = tx.objectStore("settings").get("personal");
     let count = 0;
-    config.onsuccess = () => {
-      let validated: Transaction[];
-      try {
-        const settings = resolveSettings(config.result);
-        validated = items.map((t) => ({
-          ...validateTransaction(t, settings),
-          id: t.id,
-          createdAt: t.createdAt,
-          source: t.source,
-        }));
-      } catch (error) {
-        abort(error);
-        return;
-      }
+    withValidSnapshot(tx, abort, ({ settings, transactions }) => {
+      const validated = items.map((t) => ({
+        ...validateTransaction(t, settings),
+        id: t.id,
+        createdAt: t.createdAt,
+        source: t.source,
+      }));
       const store = tx.objectStore("transactions");
-      const existing = store.getAll();
-      existing.onsuccess = () => {
-        try {
-          const signatures = new Set(
-            (existing.result as Transaction[]).map(transactionSignature),
-          );
-          validated.forEach((t) => {
-            const signature = transactionSignature(t);
-            if (skipDuplicates && signatures.has(signature)) return;
-            signatures.add(signature);
-            store.add(t);
-            count++;
-          });
-        } catch (error) {
-          abort(error);
-        }
-      };
-    };
+      const signatures = new Set(transactions.map(transactionSignature));
+      validated.forEach((t) => {
+        const signature = transactionSignature(t);
+        if (skipDuplicates && signatures.has(signature)) return;
+        signatures.add(signature);
+        store.add(t);
+        count++;
+      });
+    });
     await done;
     return count;
   },
@@ -337,17 +362,13 @@ export const transactionRepository: TransactionRepository = {
     const db = await openDatabase();
     const tx = db.transaction(["transactions", "settings"], "readwrite");
     const { done, abort } = complete(tx);
-    const rows = tx.objectStore("transactions").getAll();
-    rows.onsuccess = () => {
-      try {
-        (rows.result as Transaction[]).forEach((t) =>
-          validateTransaction(t, settings, { structural: true }),
-        );
-        tx.objectStore("settings").put(settings, "personal");
-      } catch (error) {
-        abort(error);
-      }
-    };
+    withValidSnapshot(tx, abort, ({ transactions }) => {
+      transactions.forEach((t) =>
+        validateTransaction(t, settings, { structural: true }),
+      );
+      validateBackupSnapshot({ transactions, settings });
+      tx.objectStore("settings").put(settings, "personal");
+    });
     await done;
   },
   async removeDemo() {

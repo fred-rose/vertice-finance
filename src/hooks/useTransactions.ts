@@ -5,22 +5,19 @@ import type {
   NewTransaction,
   Transaction,
 } from "../types/finance";
-import { defaultSettings } from "../data/catalog";
 import { validateTransaction } from "../features/transactions/validation";
 import {
   transactionRepository,
   RestoreError,
+  LocalReadError,
   type TransactionRepository,
 } from "../services/transactionRepository";
 export function useTransactions(
   repository: TransactionRepository = transactionRepository,
 ) {
-  const [snapshot, setSnapshot] = useState<FinanceSnapshot>({
-    transactions: [],
-    settings: defaultSettings(),
-  });
+  const [snapshot, setSnapshot] = useState<FinanceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<Error | null>(null);
   const [restoreVersion, setRestoreVersion] = useState(0);
   const sequence = useRef(0);
   const channel = useRef<BroadcastChannel | null>(null);
@@ -30,15 +27,17 @@ export function useTransactions(
       const data = await repository.load();
       if (request === sequence.current) {
         setSnapshot(data);
-        setError("");
+        setError(null);
       }
     } catch (e) {
-      if (request === sequence.current)
+      if (request === sequence.current) {
+        setSnapshot(null);
         setError(
-          e instanceof Error
-            ? e.message
-            : "Não foi possível carregar seus dados.",
+          e instanceof LocalReadError
+            ? e
+            : new LocalReadError("storage-unavailable", e),
         );
+      }
     } finally {
       if (request === sequence.current) setLoading(false);
     }
@@ -68,11 +67,16 @@ export function useTransactions(
     channel.current?.postMessage("changed");
     await refresh();
   }
+  function requireSnapshot() {
+    if (!snapshot || loading || error)
+      throw error ?? new LocalReadError("storage-unavailable");
+    return snapshot;
+  }
   async function saveTransaction(
     input: NewTransaction,
     existing?: Transaction,
   ) {
-    const valid = validateTransaction(input, snapshot.settings);
+    const valid = validateTransaction(input, requireSnapshot().settings);
     const transaction: Transaction = {
       ...valid,
       id: existing?.id ?? crypto.randomUUID(),
@@ -83,6 +87,7 @@ export function useTransactions(
     await changed();
   }
   async function removeTransaction(id: string) {
+    requireSnapshot();
     await repository.remove(id);
     await changed();
   }
@@ -90,8 +95,9 @@ export function useTransactions(
     inputs: NewTransaction[],
     skipDuplicates: boolean,
   ) {
+    const current = requireSnapshot();
     const items: Transaction[] = inputs.map((input) => ({
-      ...validateTransaction(input, snapshot.settings),
+      ...validateTransaction(input, current.settings),
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       source: "import",
@@ -101,10 +107,12 @@ export function useTransactions(
     return count;
   }
   async function saveSettings(settings: FinanceSettings) {
+    requireSnapshot();
     await repository.saveSettings(settings);
     await changed();
   }
   async function removeDemo() {
+    requireSnapshot();
     await repository.removeDemo();
     await changed();
   }
@@ -116,20 +124,22 @@ export function useTransactions(
       const persisted = await repository.restore(next, previous);
       sequence.current++;
       setSnapshot(persisted);
-      setError("");
+      setError(null);
+      setLoading(false);
       setRestoreVersion((v) => v + 1);
       channel.current?.postMessage("restored");
     } catch (cause) {
       if (cause instanceof RestoreError && cause.phase === "verify") {
         channel.current?.postMessage("restored");
         sequence.current++;
-        setError(cause.message);
+        setSnapshot(null);
+        setError(cause);
       }
       throw cause;
     }
   }
   return {
-    ...snapshot,
+    snapshot,
     loading,
     error,
     restoreVersion,
