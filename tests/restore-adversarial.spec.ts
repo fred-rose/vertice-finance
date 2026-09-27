@@ -55,7 +55,10 @@ for (const fault of [
         transaction,
         backupFixture,
       } = window.financeAudit;
-      await r.save(transaction({ id: "previous" }));
+      await r.save(transaction({ id: "previous" }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
       const before = await r.readForBackup();
       const events: string[] = [];
       const nativeTransaction = IDBDatabase.prototype.transaction;
@@ -109,7 +112,12 @@ for (const fault of [
       };
       IDBObjectStore.prototype.get = function (...args) {
         const request = nativeGet.apply(this, args);
-        if (this.transaction === restoreTx) observe(this, "config", request);
+        if (this.transaction === restoreTx)
+          observe(
+            this,
+            args[0] === "personal" ? "config" : "metadata",
+            request,
+          );
         return request;
       };
       IDBObjectStore.prototype.clear = function () {
@@ -124,7 +132,11 @@ for (const fault of [
       };
       IDBObjectStore.prototype.put = function (...args) {
         if (fault === "sync-settings") throw new Error("sync-settings");
-        return observe(this, "settings", nativePut.apply(this, args));
+        return observe(
+          this,
+          args[1] === "personal" ? "settings" : "revision",
+          nativePut.apply(this, args),
+        );
       };
       try {
         await r.restore(backupFixture(), before).then(
@@ -159,30 +171,36 @@ for (const fault of [
     });
     expect(result.stores).toEqual(["settings", "transactions"]);
     expect(result.mode).toBe("readwrite");
-    expect(result.events.slice(0, 5)).toEqual([
+    expect(result.events.slice(0, 7)).toEqual([
       "created",
       "queued:rows",
       "queued:config",
+      "queued:metadata",
       "success:rows",
       "success:config",
+      "success:metadata",
     ]);
     if (fault === "none") {
       expect(result.events).toEqual([
         "created",
         "queued:rows",
         "queued:config",
+        "queued:metadata",
         "success:rows",
         "success:config",
+        "success:metadata",
         "queued:clear",
         "queued:add-1",
         "queued:add-2",
         "queued:add-3",
         "queued:settings",
+        "queued:revision",
         "success:clear",
         "success:add-1",
         "success:add-2",
         "success:add-3",
         "success:settings",
+        "success:revision",
         "complete",
         "resolve",
       ]);
@@ -213,8 +231,11 @@ test("autocommit: await externo perde a transaction", async ({
 }, testInfo) => {
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    await r.save(transaction({ id: "before" }));
-    const request = indexedDB.open("vertice-finance", 2);
+    await r.save(transaction({ id: "before" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
+    const request = indexedDB.open("vertice-finance", 3);
     const db = await new Promise<IDBDatabase>((resolve) => {
       request.onsuccess = () => resolve(request.result);
     });
@@ -237,7 +258,7 @@ test("autocommit: await externo perde a transaction", async ({
       events.push((e as Error).name);
     }
     db.close();
-    return { events, rows: (await r.readForBackup()).transactions };
+    return { events, rows: (await r.readForBackup()).snapshot.transactions };
   });
   await testInfo.attach("autocommit", {
     body: JSON.stringify(result),
@@ -256,9 +277,12 @@ test("regressão: verificação não pode fabricar settings ausentes após commi
       transaction,
       defaultSettings,
     } = window.financeAudit;
-    await r.save(transaction({ id: "previous" }));
+    await r.save(transaction({ id: "previous" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const before = await r.readForBackup();
-    const open = indexedDB.open("vertice-finance", 2);
+    const open = indexedDB.open("vertice-finance", 3);
     const db = await new Promise<IDBDatabase>((resolve) => {
       open.onsuccess = () => resolve(open.result);
     });
@@ -267,7 +291,7 @@ test("regressão: verificação não pode fabricar settings ausentes após commi
     let removed!: Promise<void>;
     IDBObjectStore.prototype.put = function (...args) {
       const request = nativePut.apply(this, args);
-      if (this.name === "settings") {
+      if (this.name === "settings" && args[1] === "personal") {
         this.transaction.addEventListener("complete", () =>
           events.push("restore-complete"),
         );
@@ -344,7 +368,7 @@ test("regressão: JSON com overflow em campo adicional deve falhar antes de subs
       await r.restore(parsed, before);
       accepted = true;
       try {
-        serializeBackup(await r.readForBackup());
+        serializeBackup((await r.readForBackup()).snapshot);
         exportable = true;
       } catch {
         /* Capture recovery failure. */
@@ -372,7 +396,10 @@ for (const token of ["1e400", "-1e400"]) {
         backupFixture,
         parseBackup,
       } = window.financeAudit;
-      await r.save(transaction({ id: "preserved" }));
+      await r.save(transaction({ id: "preserved" }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
       const before = await r.readForBackup();
       const json = JSON.stringify(backupFixture()).replace(
         '"amount":2000',
@@ -451,7 +478,7 @@ test("metadata finita permanece reexportável após persistência e reload", asy
       parseBackup,
     } = window.financeAudit;
     const persisted = await r.readForBackup();
-    const reexported = parseBackup(serializeBackup(persisted));
+    const reexported = parseBackup(serializeBackup(persisted.snapshot));
     return {
       settings: reexported.settings,
       transactions: reexported.transactions,

@@ -1,3 +1,4 @@
+import { LocalConflictError } from "../../services/transactionRepository";
 import { useState } from "react";
 import { LoaderCircle, Plus } from "lucide-react";
 import type {
@@ -30,9 +31,10 @@ export function TransactionForm({
     transaction?.type ?? "expense",
   );
   const [error, setError] = useState("");
+  const [conflicted, setConflicted] = useState(false);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || conflicted) return;
     const form = new FormData(e.currentTarget);
     const base = {
       amount: parseAmount(String(form.get("amount"))),
@@ -57,6 +59,7 @@ export function TransactionForm({
       await onSave(valid);
       onClose();
     } catch (e) {
+      setConflicted(e instanceof LocalConflictError);
       setError(
         e instanceof Error
           ? e.message
@@ -196,7 +199,17 @@ export function TransactionForm({
             {error}
           </p>
         )}
-        <button type="submit" className="primary-button save-button">
+        {conflicted && (
+          <p>
+            Feche e reabra a edição para revisar os dados atuais. O conteúdo não
+            salvo será descartado.
+          </p>
+        )}
+        <button
+          type="submit"
+          className="primary-button save-button"
+          disabled={conflicted}
+        >
           {busy ? (
             <LoaderCircle size={18} className="animate-spin" />
           ) : (

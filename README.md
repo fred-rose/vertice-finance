@@ -98,7 +98,11 @@ Datas civis futuras estruturalmente válidas podem ser restauradas e lidas; os c
 
 ## Persistência e migração
 
-Banco IndexedDB `vertice-finance`, versão 2, stores `transactions` e `settings`. A atualização de v1 preserva IDs, valores e lançamentos, migra `account/category/destinationAccount` para `accountId/categoryId/destinationAccountId` e identifica a demonstração legada pelo prefixo original `demo-`.
+Banco IndexedDB `vertice-finance`, versão 3, stores `transactions` e `settings`. A atualização de v1 preserva IDs, valores e lançamentos, migra `account/category/destinationAccount` para `accountId/categoryId/destinationAccountId` e identifica a demonstração legada pelo prefixo original `demo-`. A migração v2→v3 valida a base e adiciona somente a chave reservada `settings["__vertice_local_concurrency__"]`, com protocolo 1 e revisão 0. Base v2 inválida ou colisão da chave aborta a migração; metadata ausente/inválida em v3 exige recovery, sem reparo.
+
+A2b exige revisão explícita nos seis writers. Comparação da revisão, validação, dados e incremento acontecem na mesma transação. Create não sobrescreve ID existente; update não recria ID removido. Mesmo comandos aceitos sem mudança financeira e restores idênticos consomem revisão. O backup continua JSON v2, sem revisão operacional. Clientes antigos que abrem IndexedDB v2 recebem `VersionError` após a migração. Se outra aba bloquear o upgrade, feche-a e tente novamente; a tentativa rejeitada não migra silenciosamente depois.
+
+Cada editor, draft de configurações, importação e confirmação guarda a revisão de abertura. Broadcast/focus podem atualizar os dados ao fundo, mas não renovam esse token. Em conflito, a alteração não é salva nem reenviada: feche e reabra a sessão para revisar. Em Configurações, **Atualizar edição** descarta o draft e carrega os dados atuais. Detalhes e validação: [IMPLEMENTACAO-A2B.md](IMPLEMENTACAO-A2B.md).
 
 Dados demonstrativos antigos continuam visíveis até a pessoa clicar em **Remover demonstração** e confirmar. Essa operação remove apenas os registros marcados como demonstração, preservando lançamentos reais e configurações. `src/data/demo.ts` permanece como fixture de desenvolvimento e não é importado pela aplicação.
 
@@ -149,4 +153,4 @@ Não há ESLint configurado. A verificação disponível combina TypeScript estr
 
 ## Próximas etapas
 
-Recorrência automática, recuperação de bases parcialmente inválidas, proteção geral contra edições concorrentes e gestão dedicada de orçamentos/metas podem evoluir depois. Patrimônio, OFX, backend e integrações bancárias ficam para fases posteriores.
+Recorrência automática, recuperação de bases parcialmente inválidas, preservação de drafts durante reload/atualização (A2c) e gestão dedicada de orçamentos/metas podem evoluir depois. Patrimônio, OFX, backend e integrações bancárias ficam para fases posteriores.

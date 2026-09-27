@@ -11,7 +11,7 @@ async function persisted(page: Page): Promise<FinanceSnapshot> {
   return page.evaluate(
     () =>
       new Promise((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 2);
+        const req = indexedDB.open("vertice-finance", 3);
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
           const db = req.result;
@@ -265,7 +265,7 @@ test("alteração entre download e confirmação exige uma nova cópia", async (
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 2);
+        const req = indexedDB.open("vertice-finance", 3);
         req.onsuccess = () => {
           const db = req.result;
           const tx = db.transaction("settings", "readwrite");

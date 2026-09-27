@@ -30,6 +30,9 @@ export interface RawFixture {
   settings: unknown;
   present: boolean;
   includeOther?: boolean;
+  databaseVersion?: 2 | 3;
+  metadata?: unknown;
+  metadataPresent?: boolean;
 }
 
 // Deliberate corruption is confined to each test's isolated browser context.
@@ -37,7 +40,10 @@ export async function seedLocal(page: Page, state: RawFixture) {
   await page.evaluate(
     (state) =>
       new Promise<void>((resolve, reject) => {
-        const open = indexedDB.open("vertice-finance", 2);
+        const open = indexedDB.open(
+          "vertice-finance",
+          state.databaseVersion ?? 3,
+        );
         open.onupgradeneeded = () => {
           open.result.createObjectStore("transactions", { keyPath: "id" });
           open.result.createObjectStore("settings");
@@ -52,6 +58,18 @@ export async function seedLocal(page: Page, state: RawFixture) {
           settings.clear();
           for (const row of state.transactions) rows.add(row);
           if (state.present) settings.put(state.settings, "personal");
+          if (
+            (state.databaseVersion ?? 3) === 3 &&
+            state.metadataPresent !== false
+          )
+            settings.put(
+              state.metadata === undefined
+                ? { protocol: 1, revision: 0 }
+                : state.metadata,
+              "__vertice_local_concurrency__",
+            );
+          if (state.databaseVersion === 2 && state.metadataPresent === true)
+            settings.put(state.metadata, "__vertice_local_concurrency__");
           if (state.includeOther !== false)
             settings.put({ preserved: true }, "other");
           tx.oncomplete = () => {
@@ -76,7 +94,7 @@ export async function rawLocal(page: Page) {
         keys: IDBValidKey[];
         settings: unknown[];
       }>((resolve, reject) => {
-        const open = indexedDB.open("vertice-finance", 2);
+        const open = indexedDB.open("vertice-finance");
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
           const db = open.result;

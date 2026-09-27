@@ -266,7 +266,10 @@ test("backup recuperado em contexto novo mantém a origem inválida intacta", as
       .getByRole("button", { name: "Restaurar este backup", exact: true })
       .click();
     await expect(target.getByRole("dialog")).toHaveCount(0);
-    expect((await rawLocal(target)).settings).toEqual([fixture.settings]);
+    expect((await rawLocal(target)).settings).toEqual([
+      { protocol: 1, revision: 1 },
+      fixture.settings,
+    ]);
     expect(await rawLocal(page)).toEqual(before);
   } finally {
     await destination.close();

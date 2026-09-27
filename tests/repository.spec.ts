@@ -46,15 +46,18 @@ test("primeira inicialização cria stores sem demonstração e persiste salvar/
     const { transactionRepository: r, transaction } = window.financeAudit;
     const initial = await r.load();
     const row = transaction();
-    await r.save(row);
-    await r.save({ ...row, amount: 100.5, description: "Editado" });
+    await r.save(row, { kind: "create", expectedRevision: 0 });
+    await r.save(
+      { ...row, amount: 100.5, description: "Editado" },
+      { kind: "update", expectedRevision: 1 },
+    );
     const edited = await r.load();
     return { initial, edited, id: row.id };
   });
-  expect(result.initial.transactions).toEqual([]);
-  expect(result.initial.settings.accounts).toHaveLength(2);
-  expect(result.edited.transactions).toHaveLength(1);
-  expect(result.edited.transactions[0]).toMatchObject({
+  expect(result.initial.snapshot.transactions).toEqual([]);
+  expect(result.initial.snapshot.settings.accounts).toHaveLength(2);
+  expect(result.edited.snapshot.transactions).toHaveLength(1);
+  expect(result.edited.snapshot.transactions[0]).toMatchObject({
     amount: 100.5,
     description: "Editado",
   });
@@ -63,18 +66,19 @@ test("primeira inicialização cria stores sem demonstração e persiste salvar/
   expect(
     await page.evaluate(
       async () =>
-        (await window.financeAudit.transactionRepository.load()).transactions[0]
-          .amount,
+        (await window.financeAudit.transactionRepository.load()).snapshot
+          .transactions[0].amount,
     ),
   ).toBe(100.5);
   await page.evaluate(
-    (id) => window.financeAudit.transactionRepository.remove(id),
+    (id) => window.financeAudit.transactionRepository.remove(id, 2),
     result.id,
   );
   expect(
     await page.evaluate(
       async () =>
-        (await window.financeAudit.transactionRepository.load()).transactions,
+        (await window.financeAudit.transactionRepository.load()).snapshot
+          .transactions,
     ),
   ).toEqual([]);
 });
@@ -110,8 +114,8 @@ test("migração v1 preserva origem e destino de transferência e é estável ao
   const snapshot = await page.evaluate(() =>
     window.financeAudit.transactionRepository.load(),
   );
-  expect(snapshot.transactions).toHaveLength(1);
-  expect(snapshot.transactions[0]).toMatchObject({
+  expect(snapshot.snapshot.transactions).toHaveLength(1);
+  expect(snapshot.snapshot.transactions[0]).toMatchObject({
     id: "legacy-transfer",
     type: "transfer",
     amount: 29.9,
@@ -121,7 +125,7 @@ test("migração v1 preserva origem e destino de transferência e é estável ao
     source: "manual",
     createdAt: "2026-09-10T12:00:00.000Z",
   });
-  expect(snapshot.transactions[0]).not.toHaveProperty("account");
+  expect(snapshot.snapshot.transactions[0]).not.toHaveProperty("account");
   await page.reload();
   await page.evaluate((code) => (0, eval)(code), bundle);
   expect(
@@ -137,6 +141,7 @@ test("settings personal ausente em v2: bloqueia load/save/import e preserva stor
     transactions: [],
     settings: undefined,
     present: false,
+    databaseVersion: 2,
   });
   const before = await rawLocal(page);
   const errors = await page.evaluate(async () => {
@@ -144,8 +149,8 @@ test("settings personal ausente em v2: bloqueia load/save/import e preserva stor
     const errors: string[] = [];
     for (const operation of [
       () => r.load(),
-      () => r.save(transaction()),
-      () => r.import([transaction()], true),
+      () => r.save(transaction(), { kind: "create", expectedRevision: 0 }),
+      () => r.import([transaction()], true, 0),
     ]) {
       try {
         await operation();
@@ -189,7 +194,10 @@ for (const [field, value, message] of [
     const result = await page.evaluate(
       async ({ field, value }) => {
         const { transactionRepository: r, transaction } = window.financeAudit;
-        await r.save(transaction({ id: "existing" }));
+        await r.save(transaction({ id: "existing" }), {
+          kind: "create",
+          expectedRevision: 0,
+        });
         const invalid = transaction(
           field === "destinationAccountId"
             ? { type: "transfer", destinationAccountId: String(value) }
@@ -197,11 +205,12 @@ for (const [field, value, message] of [
         );
         const messages: string[] = [];
         for (const operation of [
-          () => r.save(invalid),
+          () => r.save(invalid, { kind: "create", expectedRevision: 1 }),
           () =>
             r.import(
               [transaction({ description: "Válido no lote" }), invalid],
               false,
+              1,
             ),
         ]) {
           try {
@@ -210,7 +219,7 @@ for (const [field, value, message] of [
             messages.push((e as Error).message);
           }
         }
-        return { messages, rows: (await r.load()).transactions };
+        return { messages, rows: (await r.load()).snapshot.transactions };
       },
       { field, value },
     );
@@ -226,7 +235,7 @@ test("importação elimina duplicatas persistidas e internas; permite repetiçõ
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
     const saved = transaction({ id: "saved" });
-    await r.save(saved);
+    await r.save(saved, { kind: "create", expectedRevision: 0 });
     const first = await r.import(
       [
         { ...saved, id: "duplicate" },
@@ -234,6 +243,7 @@ test("importação elimina duplicatas persistidas e internas; permite repetiçõ
         transaction({ id: "new2", description: "Novo" }),
       ],
       true,
+      1,
     );
     const second = await r.import(
       [
@@ -241,11 +251,12 @@ test("importação elimina duplicatas persistidas e internas; permite repetiçõ
         { ...saved, id: "allowed2" },
       ],
       false,
+      2,
     );
-    return { first, second, rows: (await r.load()).transactions };
+    return { first, second, rows: (await r.load()).snapshot.transactions };
   });
-  expect(result.first).toBe(1);
-  expect(result.second).toBe(2);
+  expect(result.first).toEqual({ count: 1, revision: 2 });
+  expect(result.second).toEqual({ count: 2, revision: 3 });
   expect(result.rows).toHaveLength(4);
   expect(result.rows.some((t) => t.id === "duplicate")).toBe(false);
 });
@@ -255,7 +266,10 @@ test("erro de chave no meio do lote reverte gravações e preserva a causa nativ
 }) => {
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    await r.save(transaction({ id: "existing" }));
+    await r.save(transaction({ id: "existing" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     let message = "",
       cause = "";
     try {
@@ -265,12 +279,13 @@ test("erro de chave no meio do lote reverte gravações e preserva a causa nativ
           transaction({ id: "existing", description: "Conflito" }),
         ],
         false,
+        1,
       );
     } catch (e) {
       message = (e as Error).message;
       cause = ((e as Error).cause as DOMException)?.name;
     }
-    return { message, cause, rows: (await r.load()).transactions };
+    return { message, cause, rows: (await r.load()).snapshot.transactions };
   });
   expect(result.message).toContain("conflito");
   expect(result.cause).toBe("ConstraintError");
@@ -282,7 +297,10 @@ test("falha síncrona no meio da importação também reverte o lote inteiro", a
 }) => {
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    await r.save(transaction({ id: "existing" }));
+    await r.save(transaction({ id: "existing" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const original = IDBObjectStore.prototype.add;
     let calls = 0;
     let cause = "";
@@ -297,13 +315,14 @@ test("falha síncrona no meio da importação também reverte o lote inteiro", a
       await r.import(
         [transaction(), transaction({ description: "Segundo" })],
         false,
+        1,
       );
     } catch (e) {
       cause = ((e as Error).cause as DOMException)?.name;
     } finally {
       IDBObjectStore.prototype.add = original;
     }
-    return { cause, rows: (await r.load()).transactions };
+    return { cause, rows: (await r.load()).snapshot.transactions };
   });
   expect(result.cause).toBe("QuotaExceededError");
   expect(result.rows.map((t) => t.id)).toEqual(["existing"]);
@@ -314,13 +333,16 @@ test("configuração incompatível é rejeitada com causa útil sem alterar banc
 }) => {
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    await r.save(transaction({ id: "existing" }));
+    await r.save(transaction({ id: "existing" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const initial = await r.load();
-    const next = structuredClone(initial.settings);
+    const next = structuredClone(initial.snapshot.settings);
     next.accounts = next.accounts.filter((a) => a.id !== "principal");
     let message = "";
     try {
-      await r.saveSettings(next);
+      await r.saveSettings(next, initial.revision);
     } catch (e) {
       message = (e as Error).message;
     }
@@ -335,9 +357,12 @@ test("settings inválidos persistidos não são substituídos silenciosamente po
 }) => {
   const result = await page.evaluate(async () => {
     const { transactionRepository: r, transaction } = window.financeAudit;
-    await r.save(transaction({ id: "existing" }));
+    await r.save(transaction({ id: "existing" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open("vertice-finance", 2);
+      const req = indexedDB.open("vertice-finance", 3);
       req.onsuccess = () => {
         const db = req.result;
         const tx = db.transaction("settings", "readwrite");
@@ -352,8 +377,8 @@ test("settings inválidos persistidos não são substituídos silenciosamente po
     const messages: string[] = [];
     for (const op of [
       () => r.load(),
-      () => r.save(transaction()),
-      () => r.import([transaction()], false),
+      () => r.save(transaction(), { kind: "create", expectedRevision: 1 }),
+      () => r.import([transaction()], false, 1),
     ]) {
       try {
         await op();
@@ -363,7 +388,7 @@ test("settings inválidos persistidos não são substituídos silenciosamente po
     }
     const raw = await new Promise<{ rows: unknown[]; settings: unknown }>(
       (resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 2);
+        const req = indexedDB.open("vertice-finance", 3);
         req.onsuccess = () => {
           const db = req.result,
             tx = db.transaction(["settings", "transactions"]),
@@ -403,13 +428,19 @@ test("transferência persistida, editada e excluída preserva o total das contas
     const settings = defaultSettings();
     settings.accounts[0].initialBalance = 5000;
     settings.accounts[1].initialBalance = 2000;
-    await r.saveSettings(settings);
+    await r.saveSettings(settings, 0);
     await r.save(
       transaction({ type: "income", categoryId: "income", amount: 2000 }),
+      { kind: "create", expectedRevision: 1 },
     );
-    await r.save(transaction({ amount: 500 }));
+    await r.save(transaction({ amount: 500 }), {
+      kind: "create",
+      expectedRevision: 2,
+    });
     const snapshot = async () => {
-      const { transactions, settings } = await r.load();
+      const {
+        snapshot: { transactions, settings },
+      } = await r.load();
       return {
         summary: summarize(transactions),
         a: accountBalance(settings.accounts[0], transactions),
@@ -423,11 +454,14 @@ test("transferência persistida, editada e excluída preserva o total das contas
       id: "transfer",
       amount: 1000,
     });
-    await r.save(transfer);
+    await r.save(transfer, { kind: "create", expectedRevision: 3 });
     const added = await snapshot();
-    await r.save({ ...transfer, amount: 2500 });
+    await r.save(
+      { ...transfer, amount: 2500 },
+      { kind: "update", expectedRevision: 4 },
+    );
     const edited = await snapshot();
-    await r.remove(transfer.id);
+    await r.remove(transfer.id, 5);
     return { baseline, added, edited, deleted: await snapshot() };
   });
   expect(result.baseline).toMatchObject({ a: 6500, b: 2000, total: 8500 });
@@ -449,7 +483,7 @@ test("remoção da demonstração preserva IDs pessoais e todas as configuraçõ
     } = window.financeAudit;
     const settings = defaultSettings();
     settings.plannedIncome = 5000;
-    await r.saveSettings(settings);
+    await r.saveSettings(settings, 0);
     await r.import(
       [
         transaction({ id: "demo-explicit", source: "demo" }),
@@ -457,15 +491,16 @@ test("remoção da demonstração preserva IDs pessoais e todas as configuraçõ
         transaction({ id: "imported", source: "import" }),
       ],
       false,
+      1,
     );
-    await r.removeDemo();
+    await r.removeDemo(2);
     return await r.load();
   });
-  expect(result.transactions.map((t) => t.id).sort()).toEqual([
+  expect(result.snapshot.transactions.map((t) => t.id).sort()).toEqual([
     "demo-personal-id",
     "imported",
   ]);
-  expect(result.settings.plannedIncome).toBe(5000);
+  expect(result.snapshot.settings.plannedIncome).toBe(5000);
 });
 
 for (const operation of ["remove", "removeDemo"] as const) {
@@ -481,13 +516,17 @@ for (const operation of ["remove", "removeDemo"] as const) {
           transaction({ id: "personal", source: "manual" }),
         ],
         false,
+        0,
       );
       const before = await r.load();
       const storeDelete = IDBObjectStore.prototype.delete;
       const cursorDelete = IDBCursor.prototype.delete;
       let calls = 0;
       IDBObjectStore.prototype.delete = function (...args) {
-        if (this.name === "transactions")
+        if (
+          this.name === "transactions" &&
+          ++calls === (operation === "remove" ? 1 : 2)
+        )
           throw new DOMException(
             "Detalhe técnico de teste",
             "QuotaExceededError",
@@ -505,8 +544,8 @@ for (const operation of ["remove", "removeDemo"] as const) {
       let message = "",
         cause = "";
       try {
-        if (operation === "remove") await r.remove("personal");
-        else await r.removeDemo();
+        if (operation === "remove") await r.remove("personal", before.revision);
+        else await r.removeDemo(before.revision);
       } catch (e) {
         message = (e as Error).message;
         cause = ((e as Error).cause as DOMException)?.name;

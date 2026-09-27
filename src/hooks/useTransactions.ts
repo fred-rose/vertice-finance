@@ -10,12 +10,15 @@ import {
   transactionRepository,
   RestoreError,
   LocalReadError,
+  LocalConflictError,
+  type LocalRead,
+  type WriteReceipt,
   type TransactionRepository,
 } from "../services/transactionRepository";
 export function useTransactions(
   repository: TransactionRepository = transactionRepository,
 ) {
-  const [snapshot, setSnapshot] = useState<FinanceSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<LocalRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [restoreVersion, setRestoreVersion] = useState(0);
@@ -63,6 +66,16 @@ export function useTransactions(
       window.removeEventListener("focus", focus);
     };
   }, [refresh]);
+  async function command<T extends WriteReceipt>(
+    run: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await run();
+    } catch (cause) {
+      if (cause instanceof LocalConflictError) await refresh();
+      throw cause;
+    }
+  }
   async function changed() {
     channel.current?.postMessage("changed");
     await refresh();
@@ -74,52 +87,67 @@ export function useTransactions(
   }
   async function saveTransaction(
     input: NewTransaction,
+    expectedRevision: number,
     existing?: Transaction,
   ) {
-    const valid = validateTransaction(input, requireSnapshot().settings);
+    const valid = validateTransaction(
+      input,
+      requireSnapshot().snapshot.settings,
+    );
     const transaction: Transaction = {
       ...valid,
       id: existing?.id ?? crypto.randomUUID(),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       source: existing?.source ?? "manual",
     };
-    await repository.save(transaction);
+    await command(() =>
+      repository.save(transaction, {
+        kind: existing ? "update" : "create",
+        expectedRevision,
+      }),
+    );
     await changed();
   }
-  async function removeTransaction(id: string) {
+  async function removeTransaction(id: string, expectedRevision: number) {
     requireSnapshot();
-    await repository.remove(id);
+    await command(() => repository.remove(id, expectedRevision));
     await changed();
   }
   async function importTransactions(
     inputs: NewTransaction[],
     skipDuplicates: boolean,
+    expectedRevision: number,
   ) {
     const current = requireSnapshot();
     const items: Transaction[] = inputs.map((input) => ({
-      ...validateTransaction(input, current.settings),
+      ...validateTransaction(input, current.snapshot.settings),
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       source: "import",
     }));
-    const count = await repository.import(items, skipDuplicates);
+    const { count } = await command(() =>
+      repository.import(items, skipDuplicates, expectedRevision),
+    );
     await changed();
     return count;
   }
-  async function saveSettings(settings: FinanceSettings) {
-    requireSnapshot();
-    await repository.saveSettings(settings);
-    await changed();
-  }
-  async function removeDemo() {
-    requireSnapshot();
-    await repository.removeDemo();
-    await changed();
-  }
-  async function restoreBackup(
-    next: FinanceSnapshot,
-    previous: FinanceSnapshot,
+  async function saveSettings(
+    settings: FinanceSettings,
+    expectedRevision: number,
   ) {
+    requireSnapshot();
+    const receipt = await command(() =>
+      repository.saveSettings(settings, expectedRevision),
+    );
+    await changed();
+    return receipt;
+  }
+  async function removeDemo(expectedRevision: number) {
+    requireSnapshot();
+    await command(() => repository.removeDemo(expectedRevision));
+    await changed();
+  }
+  async function restoreBackup(next: FinanceSnapshot, previous: LocalRead) {
     try {
       const persisted = await repository.restore(next, previous);
       sequence.current++;
@@ -139,7 +167,8 @@ export function useTransactions(
     }
   }
   return {
-    snapshot,
+    snapshot: snapshot?.snapshot ?? null,
+    revision: snapshot?.revision,
     loading,
     error,
     restoreVersion,

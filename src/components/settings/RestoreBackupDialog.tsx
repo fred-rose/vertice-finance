@@ -8,7 +8,10 @@ import {
   type BackupV2,
 } from "../../features/transactions/backup";
 import { download } from "../../features/transactions/importExport";
-import { RestoreError } from "../../services/transactionRepository";
+import {
+  RestoreError,
+  type LocalRead,
+} from "../../services/transactionRepository";
 import { Dialog } from "../ui/Dialog";
 import { RecoveryGuidance } from "./LocalDataRecovery";
 
@@ -17,15 +20,12 @@ export function RestoreBackupDialog({
   onRestore,
   onClose,
 }: {
-  readForBackup: () => Promise<FinanceSnapshot>;
-  onRestore: (
-    snapshot: FinanceSnapshot,
-    previous: FinanceSnapshot,
-  ) => Promise<void>;
+  readForBackup: () => Promise<LocalRead>;
+  onRestore: (snapshot: FinanceSnapshot, previous: LocalRead) => Promise<void>;
   onClose: () => void;
 }) {
   const [backup, setBackup] = useState<BackupV2 | null>(null);
-  const [safety, setSafety] = useState<FinanceSnapshot | null>(null);
+  const [safety, setSafety] = useState<LocalRead | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [verificationFailed, setVerificationFailed] = useState(false);
@@ -69,7 +69,7 @@ export function RestoreBackupDialog({
     setBusy("Preparando o backup de segurança…");
     try {
       const current = await readForBackup();
-      const content = serializeBackup(current);
+      const content = serializeBackup(current.snapshot);
       download(
         content,
         `vertice-backup-pre-restore-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,

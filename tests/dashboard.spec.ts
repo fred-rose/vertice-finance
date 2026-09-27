@@ -95,7 +95,7 @@ for (const operation of ["cadastro", "importação"] as const) {
     // Simulate another writer changing settings after the form/preview captured its snapshot.
     await page.evaluate(async () => {
       await new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 2);
+        const req = indexedDB.open("vertice-finance", 3);
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
           const db = req.result;
@@ -339,9 +339,9 @@ test("falha de gravação mantém formulário e não altera saldo", async ({
   await page.goto("/");
   await add(page, "Receita inicial", "500", "Receita");
   await page.evaluate(() => {
-    const put = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function (
-      ...args: Parameters<IDBObjectStore["put"]>
+    const put = IDBObjectStore.prototype.add;
+    IDBObjectStore.prototype.add = function (
+      ...args: Parameters<IDBObjectStore["add"]>
     ) {
       if (this.name === "transactions")
         throw new DOMException("Falha simulada", "QuotaExceededError");
@@ -370,7 +370,7 @@ for (const operation of ["exclusão", "remoção demo"] as const) {
     await add(page, "Gasto demonstrativo", "85");
     await page.evaluate(async () => {
       await new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open("vertice-finance", 2);
+        const request = indexedDB.open("vertice-finance", 3);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;

@@ -13,29 +13,60 @@ import {
   validateSettings,
   validateTransaction,
 } from "../features/transactions/validation";
+export const LOCAL_DATABASE_VERSION = 3;
+export const CONCURRENCY_KEY = "__vertice_local_concurrency__";
+export interface LocalRead {
+  snapshot: FinanceSnapshot;
+  revision: number;
+}
+export interface WriteReceipt {
+  revision: number;
+}
+export interface SaveIntent {
+  kind: "create" | "update";
+  expectedRevision: number;
+}
 export interface TransactionRepository {
-  load(): Promise<FinanceSnapshot>;
-  readForBackup(): Promise<FinanceSnapshot>;
-  restore(
-    snapshot: FinanceSnapshot,
-    safetySnapshot: FinanceSnapshot,
-  ): Promise<FinanceSnapshot>;
-  save(transaction: Transaction): Promise<void>;
-  remove(id: string): Promise<void>;
-  import(items: Transaction[], skipDuplicates: boolean): Promise<number>;
-  saveSettings(settings: FinanceSettings): Promise<void>;
-  removeDemo(): Promise<void>;
+  load(): Promise<LocalRead>;
+  readForBackup(): Promise<LocalRead>;
+  restore(snapshot: FinanceSnapshot, safety: LocalRead): Promise<LocalRead>;
+  save(transaction: Transaction, intent: SaveIntent): Promise<WriteReceipt>;
+  remove(id: string, expectedRevision: number): Promise<WriteReceipt>;
+  import(
+    items: Transaction[],
+    skipDuplicates: boolean,
+    expectedRevision: number,
+  ): Promise<WriteReceipt & { count: number }>;
+  saveSettings(
+    settings: FinanceSettings,
+    expectedRevision: number,
+  ): Promise<WriteReceipt>;
+  removeDemo(expectedRevision: number): Promise<WriteReceipt>;
+}
+export class LocalConflictError extends Error {
+  readonly code = "stale-state";
+  constructor() {
+    super(
+      "Os dados mudaram desde o início desta edição. Sua alteração não foi salva. Atualize os dados e revise antes de tentar novamente.",
+    );
+    this.name = "LocalConflictError";
+  }
 }
 export class LocalReadError extends Error {
   constructor(
     public readonly code:
-      "missing-settings" | "invalid-snapshot" | "storage-unavailable",
+      | "missing-settings"
+      | "invalid-snapshot"
+      | "storage-unavailable"
+      | "upgrade-blocked",
     cause?: unknown,
   ) {
     super(
-      code === "storage-unavailable"
-        ? "Não foi possível acessar os dados locais. Tente novamente; saldos e configurações estão indisponíveis."
-        : "Não foi possível validar os dados locais. Seus registros foram preservados; saldos e configurações estão indisponíveis.",
+      code === "upgrade-blocked"
+        ? "Feche as outras abas do Vértice e tente novamente para atualizar os dados locais. Nenhum dado foi substituído."
+        : code === "storage-unavailable"
+          ? "Não foi possível acessar os dados locais. Tente novamente; saldos e configurações estão indisponíveis."
+          : "Não foi possível validar os dados locais. Seus registros foram preservados; saldos e configurações estão indisponíveis.",
       { cause },
     );
     this.name = "LocalReadError";
@@ -60,71 +91,151 @@ export class RestoreError extends Error {
     this.name = "RestoreError";
   }
 }
+
+function validRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+function metadataRevision(value: unknown, present: boolean): number {
+  if (
+    !present ||
+    !value ||
+    typeof value !== "object" ||
+    !("protocol" in value) ||
+    value.protocol !== 1 ||
+    !("revision" in value) ||
+    !validRevision(value.revision)
+  )
+    throw new LocalReadError(
+      "invalid-snapshot",
+      new Error("INVALID_LOCAL_CONCURRENCY"),
+    );
+  return value.revision;
+}
+function requireRevision(value: unknown): asserts value is number {
+  if (!validRevision(value))
+    throw new TypeError("A revisão de origem é obrigatória.");
+}
 let database: Promise<IDBDatabase> | undefined;
 function openDatabase(): Promise<IDBDatabase> {
   if (database) return database;
-  database = new Promise((resolve, reject) => {
-    const request = indexedDB.open("vertice-finance", 2);
-    let blocked = false;
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains("transactions"))
-        db.createObjectStore("transactions", { keyPath: "id" });
-      if (!db.objectStoreNames.contains("settings"))
-        db.createObjectStore("settings").put(defaultSettings(), "personal");
-      // Defaults are persisted only when creating the store: real bootstrap
-      // or the existing v1 migration. Never repair an already-open v2 database.
-      // Preserve v1 records; new databases start without demonstration data.
-      const cursor = request
-        .transaction!.objectStore("transactions")
-        .openCursor();
-      cursor.onsuccess = () => {
-        const row = cursor.result;
-        if (!row) return;
-        const { account, category, destinationAccount, ...rest } = row.value;
-        row.update({
-          ...rest,
-          accountId: rest.accountId ?? account,
-          categoryId: rest.categoryId ?? category,
-          destinationAccountId: rest.destinationAccountId ?? destinationAccount,
-          createdAt: rest.createdAt ?? `${rest.date}T12:00:00.000Z`,
-          source:
-            rest.source ??
-            (String(rest.id).startsWith("demo-") ? "demo" : "manual"),
-        });
-        row.continue();
+  // Identity checks keep a late failed request from clearing a newer retry.
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("vertice-finance", LOCAL_DATABASE_VERSION);
+    let cancelled = false;
+    let upgradeError: unknown;
+    request.onupgradeneeded = (event) => {
+      const db = request.result,
+        tx = request.transaction!;
+      const fail = (cause: unknown) => {
+        upgradeError = cause;
+        tx.abort();
       };
+      if (cancelled) {
+        tx.abort();
+        return;
+      }
+      try {
+        if (event.oldVersion === 0) {
+          db.createObjectStore("transactions", { keyPath: "id" });
+          const settings = db.createObjectStore("settings");
+          settings.add(defaultSettings(), "personal");
+          settings.add({ protocol: 1, revision: 0 }, CONCURRENCY_KEY);
+          return;
+        }
+        // Existing v2 must never recreate stores or normalize financial rows.
+        if (event.oldVersion < 2) {
+          if (!db.objectStoreNames.contains("transactions"))
+            db.createObjectStore("transactions", { keyPath: "id" });
+          if (!db.objectStoreNames.contains("settings"))
+            db.createObjectStore("settings").put(defaultSettings(), "personal");
+        }
+        const initialize = () => {
+          try {
+            const requests = snapshotRequests(tx);
+            whenReady(requests, () => {
+              try {
+                const raw = requests.result();
+                validateLocalSnapshot(raw);
+                if (raw.metadataPresent)
+                  throw new LocalReadError(
+                    "invalid-snapshot",
+                    new Error("RESERVED_KEY_COLLISION"),
+                  );
+                tx.objectStore("settings").add(
+                  { protocol: 1, revision: 0 },
+                  CONCURRENCY_KEY,
+                );
+              } catch (cause) {
+                fail(cause);
+              }
+            });
+          } catch (cause) {
+            fail(cause);
+          }
+        };
+        if (event.oldVersion < 2) {
+          const cursor = tx.objectStore("transactions").openCursor();
+          cursor.onsuccess = () => {
+            try {
+              const row = cursor.result;
+              if (!row) {
+                initialize();
+                return;
+              }
+              const { account, category, destinationAccount, ...rest } =
+                row.value;
+              row.update({
+                ...rest,
+                accountId: rest.accountId ?? account,
+                categoryId: rest.categoryId ?? category,
+                destinationAccountId:
+                  rest.destinationAccountId ?? destinationAccount,
+                createdAt: rest.createdAt ?? rest.date + "T12:00:00.000Z",
+                source:
+                  rest.source ??
+                  (String(rest.id).startsWith("demo-") ? "demo" : "manual"),
+              });
+              row.continue();
+            } catch (cause) {
+              fail(cause);
+            }
+          };
+        } else initialize();
+      } catch (cause) {
+        fail(cause);
+      }
     };
     request.onsuccess = () => {
-      if (blocked) {
+      if (cancelled) {
         request.result.close();
         return;
       }
       request.result.onversionchange = () => {
         request.result.close();
-        database = undefined;
+        if (database === opening) database = undefined;
       };
       resolve(request.result);
     };
     request.onerror = () => {
-      database = undefined;
+      if (database === opening) database = undefined;
       reject(
-        new Error("Não foi possível abrir seus dados locais.", {
-          cause: request.error,
-        }),
+        upgradeError ??
+          new Error("Não foi possível abrir seus dados locais.", {
+            cause: request.error,
+          }),
       );
     };
     request.onblocked = () => {
-      blocked = true;
-      database = undefined;
-      reject(
-        new Error(
-          "Feche as outras abas do Vértice e recarregue para atualizar o banco.",
-        ),
-      );
+      cancelled = true;
+      if (database === opening) database = undefined;
+      reject(new LocalReadError("upgrade-blocked"));
     };
   });
-  return database;
+  database = opening;
+  void opening.catch(() => {
+    if (database === opening) database = undefined;
+  });
+  return opening;
 }
 function repositoryError(error: unknown): Error {
   if (error instanceof DOMException) {
@@ -142,6 +253,7 @@ function repositoryError(error: unknown): Error {
     { cause: error },
   );
 }
+
 function validateLocalSnapshot(raw: {
   transactions: unknown;
   settings: unknown;
@@ -154,18 +266,39 @@ function validateLocalSnapshot(raw: {
     throw new LocalReadError("invalid-snapshot", cause);
   }
 }
-// Queue all reads together in the caller's transaction. Writes stay in the
-// final request callback, without yielding outside the active IDB transaction.
 function snapshotRequests(tx: IDBTransaction) {
   const rows = tx.objectStore("transactions").getAll();
-  const config = tx.objectStore("settings").get("personal");
-  const presence = tx.objectStore("settings").count("personal");
-  const result = () => ({
-    transactions: rows.result as unknown,
-    settings: config.result as unknown,
-    personalPresent: presence.result === 1,
-  });
-  return { rows, config, presence, result };
+  const settings = tx.objectStore("settings");
+  const config = settings.get("personal"),
+    presence = settings.count("personal");
+  const metadata = settings.get(CONCURRENCY_KEY),
+    metadataPresence = settings.count(CONCURRENCY_KEY);
+  return {
+    requests: [
+      rows,
+      config,
+      presence,
+      metadata,
+      metadataPresence,
+    ] as IDBRequest[],
+    result: () => ({
+      transactions: rows.result as unknown,
+      settings: config.result as unknown,
+      personalPresent: presence.result === 1,
+      metadata: metadata.result as unknown,
+      metadataPresent: metadataPresence.result === 1,
+    }),
+  };
+}
+function whenReady(
+  read: ReturnType<typeof snapshotRequests>,
+  action: () => void,
+) {
+  let pending = read.requests.length;
+  for (const request of read.requests)
+    request.onsuccess = () => {
+      if (--pending === 0) action();
+    };
 }
 async function readLocalSnapshot() {
   const db = await openDatabase();
@@ -179,29 +312,6 @@ async function readLocalSnapshot() {
   }
   await done;
   return requests!.result();
-}
-function withValidSnapshot(
-  tx: IDBTransaction,
-  abort: (cause: unknown) => void,
-  action: (snapshot: FinanceSnapshot) => void,
-) {
-  try {
-    const requests = snapshotRequests(tx);
-    let pending = 3;
-    const ready = () => {
-      if (--pending) return;
-      try {
-        action(validateLocalSnapshot(requests.result()));
-      } catch (cause) {
-        abort(cause);
-      }
-    };
-    requests.rows.onsuccess = ready;
-    requests.config.onsuccess = ready;
-    requests.presence.onsuccess = ready;
-  } catch (cause) {
-    abort(cause);
-  }
 }
 function complete(tx: IDBTransaction) {
   let originalError: unknown;
@@ -236,156 +346,180 @@ function complete(tx: IDBTransaction) {
     },
   };
 }
+
+async function write<T>(
+  expectedRevision: number,
+  action: (tx: IDBTransaction, snapshot: FinanceSnapshot) => T,
+): Promise<WriteReceipt & { result: T }> {
+  requireRevision(expectedRevision);
+  const db = await openDatabase();
+  const tx = db.transaction(["transactions", "settings"], "readwrite");
+  const { done, abort } = complete(tx);
+  let result!: T, revision!: number;
+  try {
+    const requests = snapshotRequests(tx);
+    whenReady(requests, () => {
+      try {
+        const raw = requests.result();
+        const current = metadataRevision(raw.metadata, raw.metadataPresent);
+        if (current !== expectedRevision) throw new LocalConflictError();
+        const snapshot = validateLocalSnapshot(raw);
+        if (current === Number.MAX_SAFE_INTEGER)
+          throw new Error(
+            "O limite de revisões locais foi atingido. Nenhum dado foi salvo; preserve seus dados e procure suporte.",
+          );
+        revision = current + 1;
+        result = action(tx, snapshot);
+        tx.objectStore("settings").put(
+          { protocol: 1, revision },
+          CONCURRENCY_KEY,
+        );
+      } catch (cause) {
+        abort(cause);
+      }
+    });
+  } catch (cause) {
+    abort(cause);
+  }
+  await done;
+  return { revision, result };
+}
 export const transactionRepository: TransactionRepository = {
   async load() {
     try {
-      return validateLocalSnapshot(await readLocalSnapshot());
+      const raw = await readLocalSnapshot();
+      const revision = metadataRevision(raw.metadata, raw.metadataPresent);
+      return { snapshot: validateLocalSnapshot(raw), revision };
     } catch (cause) {
       if (cause instanceof LocalReadError) throw cause;
       throw new LocalReadError("storage-unavailable", cause);
     }
   },
   async readForBackup() {
-    // A recovery copy must be real; retain A1's strict validation contract.
-    return validateBackupSnapshot(await readLocalSnapshot());
+    const raw = await readLocalSnapshot();
+    const revision = metadataRevision(raw.metadata, raw.metadataPresent);
+    return { snapshot: validateBackupSnapshot(raw), revision };
   },
-  async restore(snapshot, safetySnapshot) {
-    let prepared: FinanceSnapshot, previous: FinanceSnapshot;
+  async restore(snapshot, safety) {
+    let prepared: FinanceSnapshot, previous: LocalRead;
     try {
-      // Own the prepared input before yielding to another task/tab.
       prepared = validateBackupSnapshot(structuredClone(snapshot));
-      previous = validateBackupSnapshot(structuredClone(safetySnapshot));
+      previous = structuredClone(safety);
+      requireRevision(previous.revision);
+      previous.snapshot = validateBackupSnapshot(previous.snapshot);
     } catch (cause) {
       throw new RestoreError("prepare", cause);
     }
+    let revision: number;
     try {
-      const db = await openDatabase();
-      const tx = db.transaction(["transactions", "settings"], "readwrite");
-      const { done, abort } = complete(tx);
-      try {
+      const receipt = await write(previous.revision, (tx, current) => {
+        if (!sameBackupSnapshot(previous.snapshot, current))
+          throw new RestoreError("changed");
         const store = tx.objectStore("transactions");
-        const configStore = tx.objectStore("settings");
-        const rows = store.getAll();
-        const config = configStore.get("personal");
-        let pending = 2;
-        const replace = () => {
-          if (--pending !== 0) return;
-          try {
-            if (
-              !sameBackupSnapshot(previous, {
-                transactions: rows.result,
-                settings: config.result,
-              })
-            )
-              throw new RestoreError("changed");
-            store.clear();
-            for (const row of prepared.transactions) store.add(row);
-            configStore.put(prepared.settings, "personal");
-          } catch (cause) {
-            abort(cause);
-          }
-        };
-        rows.onsuccess = replace;
-        config.onsuccess = replace;
-      } catch (cause) {
-        abort(cause);
-      }
-      await done;
+        store.clear();
+        for (const row of prepared.transactions) store.add(row);
+        tx.objectStore("settings").put(prepared.settings, "personal");
+      });
+      revision = receipt.revision;
     } catch (cause) {
       if (cause instanceof RestoreError) throw cause;
+      if (cause instanceof LocalConflictError)
+        throw new RestoreError("changed", cause);
       throw new RestoreError("write", cause);
     }
-    // This is a new read through the real repository, after the commit.
-    // Never compensate a completed commit with a second destructive write.
     try {
       const persisted = await transactionRepository.readForBackup();
-      if (!sameBackupSnapshot(prepared, persisted))
+      if (
+        persisted.revision !== revision ||
+        !sameBackupSnapshot(prepared, persisted.snapshot)
+      )
         throw new Error("RESTORE_SNAPSHOT_MISMATCH");
       return persisted;
     } catch (cause) {
       throw new RestoreError("verify", cause);
     }
   },
-  async save(transaction) {
-    const db = await openDatabase();
-    const tx = db.transaction(["transactions", "settings"], "readwrite");
-    const { done, abort } = complete(tx);
-    withValidSnapshot(tx, abort, ({ settings }) => {
-      const valid = validateTransaction(transaction, settings);
-      tx.objectStore("transactions").put({
-        ...valid,
-        id: transaction.id,
-        createdAt: transaction.createdAt,
-        source: transaction.source,
-      });
-    });
-    await done;
+  async save(transaction, intent) {
+    const input = structuredClone(transaction),
+      command = structuredClone(intent);
+    if (!command || (command.kind !== "create" && command.kind !== "update"))
+      throw new TypeError("A intenção de gravação é obrigatória.");
+    const { revision } = await write(
+      command.expectedRevision,
+      (tx, snapshot) => {
+        const exists = snapshot.transactions.some((row) => row.id === input.id);
+        if (exists !== (command.kind === "update"))
+          throw new LocalConflictError();
+        const valid = validateTransaction(input, snapshot.settings);
+        const row = {
+          ...valid,
+          id: input.id,
+          createdAt: input.createdAt,
+          source: input.source,
+        };
+        const store = tx.objectStore("transactions");
+        if (command.kind === "create") store.add(row);
+        else store.put(row);
+      },
+    );
+    return { revision };
   },
-  async remove(id) {
-    const db = await openDatabase();
-    const tx = db.transaction("transactions", "readwrite");
-    const { done, abort } = complete(tx);
-    try {
+  async remove(id, expectedRevision) {
+    const { revision } = await write(expectedRevision, (tx, snapshot) => {
+      if (!snapshot.transactions.some((row) => row.id === id))
+        throw new LocalConflictError();
       tx.objectStore("transactions").delete(id);
-    } catch (error) {
-      abort(error);
-    }
-    await done;
+    });
+    return { revision };
   },
-  async import(items, skipDuplicates) {
-    const db = await openDatabase();
-    const tx = db.transaction(["transactions", "settings"], "readwrite");
-    const { done, abort } = complete(tx);
-    let count = 0;
-    withValidSnapshot(tx, abort, ({ settings, transactions }) => {
-      const validated = items.map((t) => ({
-        ...validateTransaction(t, settings),
-        id: t.id,
-        createdAt: t.createdAt,
-        source: t.source,
-      }));
-      const store = tx.objectStore("transactions");
-      const signatures = new Set(transactions.map(transactionSignature));
-      validated.forEach((t) => {
-        const signature = transactionSignature(t);
-        if (skipDuplicates && signatures.has(signature)) return;
-        signatures.add(signature);
-        store.add(t);
-        count++;
+  async import(items, skipDuplicates, expectedRevision) {
+    const input = structuredClone(items);
+    const { revision, result: count } = await write(
+      expectedRevision,
+      (tx, snapshot) => {
+        const validated = input.map((t) => ({
+          ...validateTransaction(t, snapshot.settings),
+          id: t.id,
+          createdAt: t.createdAt,
+          source: t.source,
+        }));
+        const signatures = new Set(
+          snapshot.transactions.map(transactionSignature),
+        );
+        let count = 0;
+        const store = tx.objectStore("transactions");
+        for (const row of validated) {
+          const signature = transactionSignature(row);
+          if (skipDuplicates && signatures.has(signature)) continue;
+          signatures.add(signature);
+          store.add(row);
+          count++;
+        }
+        return count;
+      },
+    );
+    return { revision, count };
+  },
+  async saveSettings(settings, expectedRevision) {
+    const input = structuredClone(settings);
+    validateSettings(input);
+    const { revision } = await write(expectedRevision, (tx, snapshot) => {
+      for (const row of snapshot.transactions)
+        validateTransaction(row, input, { structural: true });
+      validateBackupSnapshot({
+        transactions: snapshot.transactions,
+        settings: input,
       });
+      tx.objectStore("settings").put(input, "personal");
     });
-    await done;
-    return count;
+    return { revision };
   },
-  async saveSettings(settings) {
-    validateSettings(settings);
-    const db = await openDatabase();
-    const tx = db.transaction(["transactions", "settings"], "readwrite");
-    const { done, abort } = complete(tx);
-    withValidSnapshot(tx, abort, ({ transactions }) => {
-      transactions.forEach((t) =>
-        validateTransaction(t, settings, { structural: true }),
-      );
-      validateBackupSnapshot({ transactions, settings });
-      tx.objectStore("settings").put(settings, "personal");
+  async removeDemo(expectedRevision) {
+    const { revision } = await write(expectedRevision, (tx, snapshot) => {
+      for (const row of snapshot.transactions)
+        if (row.source === "demo")
+          tx.objectStore("transactions").delete(row.id);
     });
-    await done;
-  },
-  async removeDemo() {
-    const db = await openDatabase();
-    const tx = db.transaction("transactions", "readwrite");
-    const { done, abort } = complete(tx);
-    const cursor = tx.objectStore("transactions").openCursor();
-    cursor.onsuccess = () => {
-      try {
-        const row = cursor.result;
-        if (!row) return;
-        if (row.value.source === "demo") row.delete();
-        row.continue();
-      } catch (error) {
-        abort(error);
-      }
-    };
-    await done;
+    return { revision };
   },
 };

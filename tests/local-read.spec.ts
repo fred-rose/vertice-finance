@@ -43,9 +43,12 @@ test("bootstrap real persiste personal, espera complete e não recria chave remo
   });
   expect(result.events).toEqual(["complete", "loaded"]);
   const raw = await rawLocal(page);
-  expect(raw.keys).toEqual(["personal"]);
-  expect(raw.settings).toEqual([result.snapshot.settings]);
-  expect(result.snapshot.transactions).toEqual([]);
+  expect(raw.keys).toEqual(["__vertice_local_concurrency__", "personal"]);
+  expect(raw.settings).toEqual([
+    { protocol: 1, revision: 0 },
+    result.snapshot.snapshot.settings,
+  ]);
+  expect(result.snapshot.snapshot.transactions).toEqual([]);
   await seedLocal(page, {
     transactions: [],
     settings: undefined,
@@ -98,6 +101,8 @@ for (const variant of cases) {
     if (variant === "missing-empty" || variant === "missing-completely-empty")
       state.transactions = [];
     if (variant === "missing-completely-empty") state.includeOther = false;
+    if (variant === "missing-completely-empty" || variant === "missing-empty")
+      state.databaseVersion = 2;
     if (variant === "missing-custom-ref") row.accountId = "custom-lost";
     if (variant === "null") state.settings = null;
     if (variant === "undefined") state.settings = undefined;
@@ -144,10 +149,14 @@ for (const variant of cases) {
         try {
           if (operation === "load") await r.load();
           if (operation === "backup") await r.readForBackup();
-          if (operation === "save") await r.save(transaction());
-          if (operation === "import") await r.import([transaction()], false);
+          if (operation === "save")
+            await r.save(transaction(), {
+              kind: "create",
+              expectedRevision: 0,
+            });
+          if (operation === "import") await r.import([transaction()], false, 0);
           if (operation === "settings")
-            await r.saveSettings(backupFixture().settings);
+            await r.saveSettings(backupFixture().settings, 0);
           return null;
         } catch (e) {
           const error = e as Error & { code?: string };
@@ -178,8 +187,8 @@ test("F01: saldo 8500 nunca vira 1500 quando personal é perdido", async ({
       const h = window.financeAudit;
       const s = await h.transactionRepository.load();
       return h.totalAccountBalance(
-        s.settings.accounts,
-        s.transactions,
+        s.snapshot.settings.accounts,
+        s.snapshot.transactions,
         "2026-09-15",
       );
     }),
@@ -226,8 +235,8 @@ for (const timezoneId of [
           return { load: await r.load(), backup: await r.readForBackup() };
         });
         expect(result.load).toEqual(result.backup);
-        expect(result.load.settings).toEqual(fixture.settings);
-        expect(result.load.transactions).toEqual(
+        expect(result.load.snapshot.settings).toEqual(fixture.settings);
+        expect(result.load.snapshot.transactions).toEqual(
           [...fixture.transactions].sort((a, b) => a.id.localeCompare(b.id)),
         );
         expect(await rawLocal(page)).toEqual(before);
@@ -248,6 +257,7 @@ test("store ausente retorna storage-unavailable sem reparar schema", async ({
         req.result.createObjectStore("transactions", { keyPath: "id" });
       req.onsuccess = () => resolve(req.result);
     });
+    db.close();
     try {
       await window.financeAudit.transactionRepository.load();
       return {
@@ -280,9 +290,9 @@ test("VersionError real de abertura preserva cause, mensagem segura e banco", as
   await seedLocal(page, { ...backupFixture(), present: true });
   const before = await rawLocal(page);
   const result = await page.evaluate(async () => {
-    // A newer database is only a synthetic fixture; production stays on v2.
+    // A newer database is only a synthetic fixture; production stays on v3.
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const open = indexedDB.open("vertice-finance", 3);
+      const open = indexedDB.open("vertice-finance", 4);
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
     });
@@ -340,7 +350,7 @@ test("VersionError real de abertura preserva cause, mensagem segura e banco", as
     "Não foi possível acessar os dados locais. Tente novamente; saldos e configurações estão indisponíveis.",
   );
   expect(result.raw).toEqual(before);
-  expect(result.version).toBe(3);
+  expect(result.version).toBe(4);
   expect(result.stores).toEqual(["settings", "transactions"]);
   await page.goto("/");
   await expect(page.getByRole("alert")).toHaveText(result.error!.message);
@@ -377,7 +387,7 @@ for (const failure of ["sync", "abort"] as const) {
           IDBObjectStore.prototype.getAll = native;
         }
         const after = await r.load();
-        return { code, rows: after.transactions.length };
+        return { code, rows: after.snapshot.transactions.length };
       }, failure),
     ).toEqual({ code: "storage-unavailable", rows: 0 });
   });

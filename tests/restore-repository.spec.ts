@@ -48,17 +48,20 @@ test("restore completo, equivalência financeira, IDs, metadados e reload", asyn
       accountBalance,
       summarize,
     } = window.financeAudit;
-    await r.save(transaction({ id: "old" }));
+    await r.save(transaction({ id: "old" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const backup = backupFixture();
     Object.assign(backup.transactions[0], { metadata: { preserved: true } });
     const restored = await r.restore(backup, await r.readForBackup());
     return {
       restored,
-      equal: sameBackupSnapshot(backup, restored),
-      balances: restored.settings.accounts.map((a) =>
-        accountBalance(a, restored.transactions, "2026-09-15"),
+      equal: sameBackupSnapshot(backup, restored.snapshot),
+      balances: restored.snapshot.settings.accounts.map((a) =>
+        accountBalance(a, restored.snapshot.transactions, "2026-09-15"),
       ),
-      summary: summarize(restored.transactions),
+      summary: summarize(restored.snapshot.transactions),
     };
   });
   expect(result.equal).toBe(true);
@@ -90,7 +93,9 @@ test("snapshot equivalente pode ser restaurado duas vezes sem duplicar", async (
       const before = await r.readForBackup();
       const after = await r.restore(backup, before);
       return (
-        sameBackupSnapshot(before, after) && after.transactions.length === 3
+        sameBackupSnapshot(before.snapshot, after.snapshot) &&
+        after.revision === before.revision + 1 &&
+        after.snapshot.transactions.length === 3
       );
     }),
   ).toBe(true);
@@ -103,13 +108,13 @@ test("restaura snapshot vazio junto das configurações", async ({ page }) => {
       backupFixture,
       transaction,
     } = window.financeAudit;
-    await r.save(transaction());
+    await r.save(transaction(), { kind: "create", expectedRevision: 0 });
     const backup = backupFixture();
     backup.transactions = [];
     return r.restore(backup, await r.readForBackup());
   });
-  expect(result.transactions).toEqual([]);
-  expect(result.settings.goals).toHaveLength(1);
+  expect(result.snapshot.transactions).toEqual([]);
+  expect(result.snapshot.settings.goals).toHaveLength(1);
 });
 
 test("datas futuras sobrevivem à releitura e reload; criação continua rejeitando futuro", async ({
@@ -123,7 +128,10 @@ test("datas futuras sobrevivem à releitura e reload; criação continua rejeita
     const restored = await r.restore(backup, await r.readForBackup());
     let blocked = false;
     try {
-      await r.save(backup.transactions[0]);
+      await r.save(backup.transactions[0], {
+        kind: "update",
+        expectedRevision: restored.revision,
+      });
     } catch {
       blocked = true;
     }
@@ -153,7 +161,10 @@ for (const failure of [
         backupFixture,
         RestoreError,
       } = window.financeAudit;
-      await r.save(transaction({ id: "previous" }));
+      await r.save(transaction({ id: "previous" }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
       const before = await r.readForBackup();
       const clear = IDBObjectStore.prototype.clear;
       const add = IDBObjectStore.prototype.add;
@@ -221,7 +232,10 @@ test("snapshot inválido e exceção síncrona na preparação nunca limpam stor
       backupFixture,
       RestoreError,
     } = window.financeAudit;
-    await r.save(transaction({ id: "preserved" }));
+    await r.save(transaction({ id: "preserved" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const before = await r.readForBackup();
     const invalid = backupFixture();
     invalid.transactions[0].accountId = "missing";
@@ -270,7 +284,10 @@ test("mudança após cópia de segurança bloqueia substituição dentro da tran
       RestoreError,
     } = window.financeAudit;
     const safety = await r.readForBackup();
-    await r.save(transaction({ id: "after-download" }));
+    await r.save(transaction({ id: "after-download" }), {
+      kind: "create",
+      expectedRevision: 0,
+    });
     const before = await r.load();
     let phase = "";
     try {
@@ -296,7 +313,10 @@ for (const failure of ["mismatch", "read-error"] as const) {
         sameBackupSnapshot,
         RestoreError,
       } = window.financeAudit;
-      await r.save(transaction({ id: "old" }));
+      await r.save(transaction({ id: "old" }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
       const safety = await r.readForBackup();
       const originalRead = r.readForBackup;
       const clear = IDBObjectStore.prototype.clear;
@@ -309,7 +329,7 @@ for (const failure of ["mismatch", "read-error"] as const) {
       r.readForBackup = async () => {
         if (failure === "read-error") throw new Error("injected-read");
         const persisted = await originalRead();
-        persisted.transactions[0].amount += 1;
+        persisted.snapshot.transactions[0].amount += 1;
         return persisted;
       };
       const backup = backupFixture();
@@ -326,7 +346,7 @@ for (const failure of ["mismatch", "read-error"] as const) {
         phase,
         writes,
         persisted,
-        complete: sameBackupSnapshot(backup, persisted),
+        complete: sameBackupSnapshot(backup, persisted.snapshot),
       };
     }, failure);
     expect(result.phase).toBe("verify");
@@ -352,10 +372,13 @@ for (const missing of [true, false]) {
         transaction,
         backupFixture,
       } = window.financeAudit;
-      await r.save(transaction({ id: "preserved" }));
+      await r.save(transaction({ id: "preserved" }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
       const safety = await r.readForBackup();
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 2);
+        const req = indexedDB.open("vertice-finance", 3);
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => reject(req.error);
       });

@@ -1,3 +1,7 @@
+import {
+  LocalConflictError,
+  type WriteReceipt,
+} from "../../services/transactionRepository";
 import { useState } from "react";
 import { Download, Plus } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
@@ -11,16 +15,23 @@ import { accountBalanceLabel, localDate, money } from "../../utils/format";
 
 export function SettingsPage({
   settings,
+  revision,
   transactions,
   onSave,
   onRestore,
 }: {
   settings: FinanceSettings;
+  revision: number;
   transactions: Transaction[];
-  onSave: (settings: FinanceSettings) => Promise<void>;
+  onSave: (
+    settings: FinanceSettings,
+    expectedRevision: number,
+  ) => Promise<WriteReceipt>;
   onRestore: () => void;
 }) {
   const [draft, setDraft] = useState(() => structuredClone(settings));
+  const [baseRevision, setBaseRevision] = useState(revision);
+  const [conflicted, setConflicted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -35,12 +46,18 @@ export function SettingsPage({
     ) / 100;
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (conflicted || busy) return;
     setError("");
+    setSaved(false);
     setBusy(true);
     try {
-      await onSave(validateSettings(draft));
+      const applied = structuredClone(validateSettings(draft));
+      const receipt = await onSave(applied, baseRevision);
+      setDraft(applied);
+      setBaseRevision(receipt.revision);
       setSaved(true);
     } catch (e) {
+      setConflicted(e instanceof LocalConflictError);
       setError(
         e instanceof Error
           ? e.message
@@ -528,7 +545,29 @@ export function SettingsPage({
               Configurações salvas. Seus cálculos foram atualizados.
             </p>
           )}
-          <button className="primary-button" type="submit">
+          {conflicted && (
+            <div>
+              <p>Atualizar descarta o conteúdo não salvo desta edição.</p>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setDraft(structuredClone(settings));
+                  setBaseRevision(revision);
+                  setConflicted(false);
+                  setError("");
+                  setSaved(false);
+                }}
+              >
+                Atualizar edição
+              </button>
+            </div>
+          )}
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={conflicted}
+          >
             {busy ? "Salvando…" : "Salvar configurações"}
           </button>
         </div>

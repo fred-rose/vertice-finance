@@ -20,6 +20,7 @@ import { useTransactions } from "./hooks/useTransactions";
 import { usePage } from "./hooks/usePage";
 import { monthKey, monthLabel } from "./utils/format";
 import type { NewTransaction, Transaction } from "./types/finance";
+import { LocalConflictError } from "./services/transactionRepository";
 export default function App() {
   const finance = useTransactions();
   const snapshot = finance.snapshot;
@@ -27,26 +28,28 @@ export default function App() {
   const [selected, setSelected] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
-  const [editor, setEditor] = useState<{ transaction?: Transaction } | null>(
-    null,
-  );
-  const [importing, setImporting] = useState(false);
+  const [editor, setEditor] = useState<{
+    transaction?: Transaction;
+    revision: number;
+  } | null>(null);
+  const [importing, setImporting] = useState<number | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [notice, setNotice] = useState("");
-  const [removeDemo, setRemoveDemo] = useState(false);
+  const [removeDemo, setRemoveDemo] = useState<number | null>(null);
+  const [actionConflict, setActionConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   useEffect(() => {
     if (!finance.restoreVersion) return;
     setEditor(null);
-    setImporting(false);
-    setRemoveDemo(false);
+    setImporting(null);
+    setRemoveDemo(null);
   }, [finance.restoreVersion]);
   useEffect(() => {
     if (snapshot) return;
     setEditor(null);
-    setImporting(false);
-    setRemoveDemo(false);
+    setImporting(null);
+    setRemoveDemo(null);
   }, [snapshot]);
   const title =
     page === "overview"
@@ -63,7 +66,8 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [notice]);
   async function save(input: NewTransaction) {
-    await finance.saveTransaction(input, editor?.transaction);
+    if (!editor) return;
+    await finance.saveTransaction(input, editor.revision, editor.transaction);
     setSelected(new Date(`${input.date.slice(0, 7)}-01T12:00:00`));
     setNotice("Transação salva. Sua visão geral está atualizada.");
   }
@@ -150,7 +154,7 @@ export default function App() {
               <button
                 className={`primary-button ${page === "overview" ? "desktop-add" : ""}`}
                 disabled={!snapshot || finance.loading || !!finance.error}
-                onClick={() => setEditor({})}
+                onClick={() => setEditor({ revision: finance.revision! })}
               >
                 <Plus size={18} />
                 Adicionar transação
@@ -180,7 +184,8 @@ export default function App() {
                   className="text-link"
                   onClick={() => {
                     setActionError("");
-                    setRemoveDemo(true);
+                    setActionConflict(false);
+                    setRemoveDemo(finance.revision!);
                   }}
                 >
                   Remover demonstração
@@ -192,25 +197,29 @@ export default function App() {
                 transactions={snapshot.transactions}
                 settings={snapshot.settings}
                 selected={selected}
-                onAdd={() => setEditor({})}
-                onImport={() => setImporting(true)}
+                onAdd={() => setEditor({ revision: finance.revision! })}
+                onImport={() => setImporting(finance.revision!)}
               />
             ) : page === "transactions" ? (
               <TransactionsPage
                 transactions={snapshot.transactions}
                 settings={snapshot.settings}
-                onEdit={(transaction) => setEditor({ transaction })}
-                onDelete={async (id) => {
-                  await finance.removeTransaction(id);
+                revision={finance.revision!}
+                onEdit={(transaction) =>
+                  setEditor({ transaction, revision: finance.revision! })
+                }
+                onDelete={async (id, revision) => {
+                  await finance.removeTransaction(id, revision);
                   setNotice(
                     "Transação excluída. Seus totais foram recalculados.",
                   );
                 }}
-                onImport={() => setImporting(true)}
+                onImport={() => setImporting(finance.revision!)}
               />
             ) : (
               <SettingsPage
                 key={finance.restoreVersion}
+                revision={finance.revision!}
                 settings={snapshot.settings}
                 transactions={snapshot.transactions}
                 onSave={finance.saveSettings}
@@ -261,18 +270,20 @@ export default function App() {
           }}
         />
       )}
-      {snapshot && importing && (
+      {snapshot && importing !== null && (
         <ImportModal
           settings={snapshot.settings}
           transactions={snapshot.transactions}
-          onImport={finance.importTransactions}
-          onClose={() => setImporting(false)}
+          onImport={(items, skip) =>
+            finance.importTransactions(items, skip, importing!)
+          }
+          onClose={() => setImporting(null)}
         />
       )}
-      {snapshot && removeDemo && (
+      {snapshot && removeDemo !== null && (
         <Dialog
           title="Remover dados demonstrativos?"
-          onClose={() => setRemoveDemo(false)}
+          onClose={() => setRemoveDemo(null)}
           busy={busy}
         >
           <p className="dialog-description">
@@ -289,22 +300,23 @@ export default function App() {
             <button
               className="secondary-button"
               disabled={busy}
-              onClick={() => setRemoveDemo(false)}
+              onClick={() => setRemoveDemo(null)}
             >
               Cancelar
             </button>
             <button
               className="danger-button"
-              disabled={busy}
+              disabled={busy || actionConflict}
               onClick={async () => {
                 setBusy(true);
                 try {
-                  await finance.removeDemo();
-                  setRemoveDemo(false);
+                  await finance.removeDemo(removeDemo!);
+                  setRemoveDemo(null);
                   setNotice(
                     "Demonstração removida. Agora os totais usam seus dados.",
                   );
                 } catch (e) {
+                  setActionConflict(e instanceof LocalConflictError);
                   setActionError(
                     e instanceof Error
                       ? e.message

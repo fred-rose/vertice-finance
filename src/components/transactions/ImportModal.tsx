@@ -1,3 +1,4 @@
+import { LocalConflictError } from "../../services/transactionRepository";
 import { useMemo, useState } from "react";
 import { Dialog } from "../ui/Dialog";
 import type {
@@ -44,6 +45,7 @@ export function ImportModal({
   const [skip, setSkip] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [conflicted, setConflicted] = useState(false);
   const [result, setResult] = useState<number>();
   const rows = sheets[sheet]?.rows ?? [];
   const preview = useMemo(
@@ -359,6 +361,7 @@ export function ImportModal({
                 <button
                   className="primary-button save-button"
                   disabled={
+                    conflicted ||
                     busy ||
                     !!invalid.length ||
                     mapping.date < 0 ||
@@ -379,6 +382,7 @@ export function ImportModal({
                       );
                       setResult(count);
                     } catch (e) {
+                      setConflicted(e instanceof LocalConflictError);
                       setError(
                         e instanceof Error
                           ? e.message
@@ -399,6 +403,12 @@ export function ImportModal({
           {busy && (
             <p role="status" className="form-note">
               Processando sua planilha…
+            </p>
+          )}
+          {conflicted && (
+            <p>
+              Feche e reabra a importação para revisar a prévia com os dados
+              atuais.
             </p>
           )}
           {error && (

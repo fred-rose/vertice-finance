@@ -1,3 +1,4 @@
+import { LocalConflictError } from "../../services/transactionRepository";
 import { useMemo, useState } from "react";
 import { Download, Search, Upload } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
@@ -8,15 +9,17 @@ import { summarize } from "../../features/dashboard/calculations";
 import { downloadTransactions } from "../../features/transactions/importExport";
 export function TransactionsPage({
   transactions,
+  revision,
   settings,
   onEdit,
   onDelete,
   onImport,
 }: {
   transactions: Transaction[];
+  revision: number;
   settings: FinanceSettings;
   onEdit: (t: Transaction) => void;
-  onDelete: (id: string) => Promise<void>;
+  onDelete: (id: string, expectedRevision: number) => Promise<void>;
   onImport: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -25,9 +28,13 @@ export function TransactionsPage({
   const [account, setAccount] = useState("");
   const [category, setCategory] = useState("");
   const [page, setPage] = useState(1);
-  const [deleting, setDeleting] = useState<Transaction>();
+  const [deleting, setDeleting] = useState<{
+    transaction: Transaction;
+    revision: number;
+  }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [conflicted, setConflicted] = useState(false);
   const filtered = useMemo(
     () =>
       sortTransactions(
@@ -167,7 +174,8 @@ export function TransactionsPage({
           onEdit={onEdit}
           onDelete={(t) => {
             setError("");
-            setDeleting(t);
+            setConflicted(false);
+            setDeleting({ transaction: t, revision });
           }}
         />
       ) : (
@@ -202,8 +210,9 @@ export function TransactionsPage({
           onClose={() => setDeleting(undefined)}
         >
           <p className="dialog-description">
-            {deleting.description} · {money(deleting.amount)}. Esta ação remove
-            o lançamento e recalcula seus totais.
+            {deleting.transaction.description} ·{" "}
+            {money(deleting.transaction.amount)}. Esta ação remove o lançamento
+            e recalcula seus totais.
           </p>
           {error && (
             <p className="form-error" role="alert">
@@ -220,13 +229,14 @@ export function TransactionsPage({
             </button>
             <button
               className="danger-button"
-              disabled={busy}
+              disabled={busy || conflicted}
               onClick={async () => {
                 setBusy(true);
                 try {
-                  await onDelete(deleting.id);
+                  await onDelete(deleting.transaction.id, deleting.revision);
                   setDeleting(undefined);
                 } catch (e) {
+                  setConflicted(e instanceof LocalConflictError);
                   setError(
                     e instanceof Error
                       ? e.message

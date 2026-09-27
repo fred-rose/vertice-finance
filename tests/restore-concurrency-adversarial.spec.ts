@@ -49,17 +49,20 @@ for (const stage of ["before-download", "after-download"] as const) {
     );
     if (stage === "after-download") {
       await page.evaluate(
-        (safety) => window.financeAudit.serializeBackup(safety),
+        (safety) => window.financeAudit.serializeBackup(safety.snapshot),
         safety,
       );
     }
     await other.evaluate(async () => {
       const { transactionRepository: r, transaction } = window.financeAudit;
-      await r.save(transaction({ id: "other-tab", amount: 432.1 }));
+      await r.save(transaction({ id: "other-tab", amount: 432.1 }), {
+        kind: "create",
+        expectedRevision: 0,
+      });
     });
     if (stage === "before-download") {
       await page.evaluate(
-        (safety) => window.financeAudit.serializeBackup(safety),
+        (safety) => window.financeAudit.serializeBackup(safety.snapshot),
         safety,
       );
     }
@@ -83,8 +86,10 @@ for (const stage of ["before-download", "after-download"] as const) {
     }, safety);
     expect(result.phase).toBe("changed");
     expect(result.clears).toBe(0);
-    expect(result.after.transactions.map((t) => t.id)).toEqual(["other-tab"]);
-    expect(result.after.transactions[0].amount).toBe(432.1);
+    expect(result.after.snapshot.transactions.map((t) => t.id)).toEqual([
+      "other-tab",
+    ]);
+    expect(result.after.snapshot.transactions[0].amount).toBe(432.1);
   });
 }
 
@@ -98,7 +103,7 @@ test("conexão concorrente enfileirada durante restore só grava após commit e 
       transaction,
     } = window.financeAudit;
     const safety = await r.readForBackup();
-    const open = indexedDB.open("vertice-finance", 2);
+    const open = indexedDB.open("vertice-finance", 3);
     const db = await new Promise<IDBDatabase>((resolve) => {
       open.onsuccess = () => resolve(open.result);
     });
@@ -133,7 +138,7 @@ test("conexão concorrente enfileirada durante restore só grava após commit e 
     return {
       phase,
       events,
-      ids: (await r.readForBackup()).transactions.map((t) => t.id),
+      ids: (await r.readForBackup()).snapshot.transactions.map((t) => t.id),
     };
   });
   await testInfo.attach("queued-writer", {
@@ -150,7 +155,7 @@ test("conexão concorrente enfileirada durante restore só grava após commit e 
   ]);
 });
 
-test("limite A2: escritor antigo pode reenviar settings após restore verificado", async ({
+test("A2b: settings antigas conflitam após restore verificado", async ({
   page,
   context,
 }) => {
@@ -164,16 +169,24 @@ test("limite A2: escritor antigo pode reenviar settings após restore verificado
     const { transactionRepository: r, backupFixture } = window.financeAudit;
     await r.restore(backupFixture(), await r.readForBackup());
   });
-  await other.evaluate(
-    (settings) =>
-      window.financeAudit.transactionRepository.saveSettings(settings),
-    stale.settings,
-  );
+  const code = await other.evaluate(async (stale) => {
+    try {
+      await window.financeAudit.transactionRepository.saveSettings(
+        stale.snapshot.settings,
+        stale.revision,
+      );
+      return "accepted";
+    } catch (e) {
+      return (e as { code: string }).code;
+    }
+  }, stale);
+  expect(code).toBe("stale-state");
   const current = await page.evaluate(() =>
     window.financeAudit.transactionRepository.readForBackup(),
   );
-  expect(current.settings).toEqual(stale.settings);
-  expect(current.transactions).toHaveLength(3);
+  expect(current.snapshot.settings).not.toEqual(stale.snapshot.settings);
+  expect(current.revision).toBe(stale.revision + 1);
+  expect(current.snapshot.transactions).toHaveLength(3);
 });
 
 test("campos JSON adicionais sobrevivem ao IndexedDB, load e reload", async ({
