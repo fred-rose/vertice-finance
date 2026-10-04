@@ -171,6 +171,12 @@ for (const refresh of ["broadcast", "focus", "suppressed"] as const) {
       )
       .toBeGreaterThan(reads);
     await page.getByRole("button", { name: "Atualizar edição" }).click();
+    await page.getByRole("button", { name: "Continuar editando" }).click();
+    await expect(name).toHaveValue("Draft antigo");
+    await expect(save).toBeDisabled();
+    expect(await rawLocal(page)).toEqual(before);
+    await page.getByRole("button", { name: "Atualizar edição" }).click();
+    await page.getByRole("button", { name: "Descartar e continuar" }).click();
     await expect(name).toHaveValue("Conta nova");
     await name.fill("Revisado");
     await save.click();
@@ -272,6 +278,8 @@ for (const intent of ["create", "edit", "delete", "import", "demo"] as const) {
     await expect(submit).toBeDisabled();
     expect(await rawLocal(page)).toEqual(before);
     await page.keyboard.press("Escape");
+    if (intent !== "delete" && intent !== "demo")
+      await page.getByRole("button", { name: "Descartar e fechar" }).click();
     await expect(dialog).toHaveCount(0);
   });
 }

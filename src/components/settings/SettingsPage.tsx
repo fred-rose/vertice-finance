@@ -2,7 +2,10 @@ import {
   LocalConflictError,
   type WriteReceipt,
 } from "../../services/transactionRepository";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { useInvalidated, useUnsavedWork } from "../../hooks/useUnsavedWork";
+import { editableKey } from "../../hooks/unsavedWork";
+import { InvalidatedWork } from "../ui/InvalidatedWork";
 import { Download, Plus } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
 import { accountBalance } from "../../features/dashboard/calculations";
@@ -19,6 +22,8 @@ export function SettingsPage({
   transactions,
   onSave,
   onRestore,
+  invalidated = false,
+  onDiscard,
 }: {
   settings: FinanceSettings;
   revision: number;
@@ -28,16 +33,47 @@ export function SettingsPage({
     expectedRevision: number,
   ) => Promise<WriteReceipt>;
   onRestore: () => void;
+  invalidated?: boolean;
+  onDiscard: () => void;
 }) {
+  const work = useUnsavedWork("settings");
+  const invalid = useInvalidated(invalidated);
+  const base = useRef(editableKey(settings));
+  const [pending, setPending] = useState<(() => void) | null>(null);
   const [draft, setDraft] = useState(() => structuredClone(settings));
   const [baseRevision, setBaseRevision] = useState(revision);
   const [conflicted, setConflicted] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  const setBusy = (value: boolean) => {
+    work.set({ busy: value });
+    setBusyState(value);
+  };
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   function change(next: FinanceSettings) {
+    if (invalid.current) return;
+    work.set({ hasUnsavedWork: editableKey(next) !== base.current });
     setSaved(false);
     setDraft(next);
+  }
+  useLayoutEffect(() => {
+    if (invalid.current) work.set({ invalidated: true });
+  }, [invalidated, invalid, work]);
+  function reset() {
+    if (invalid.current) return;
+    const next = structuredClone(settings);
+    base.current = editableKey(next);
+    work.set({ hasUnsavedWork: false });
+    setDraft(next);
+    setBaseRevision(revision);
+    setConflicted(false);
+    setError("");
+    setSaved(false);
+  }
+  function request(action: () => void) {
+    if (work.get().busy || invalid.current) return;
+    if (work.get().hasUnsavedWork) setPending(() => action);
+    else action();
   }
   const fixed =
     draft.fixedExpenses.reduce(
@@ -46,13 +82,16 @@ export function SettingsPage({
     ) / 100;
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (conflicted || busy) return;
+    if (conflicted || busy || work.get().busy || invalid.current) return;
     setError("");
     setSaved(false);
     setBusy(true);
     try {
       const applied = structuredClone(validateSettings(draft));
       const receipt = await onSave(applied, baseRevision);
+      if (invalid.current) return;
+      base.current = editableKey(applied);
+      work.set({ hasUnsavedWork: false });
       setDraft(applied);
       setBaseRevision(receipt.revision);
       setSaved(true);
@@ -67,8 +106,50 @@ export function SettingsPage({
       setBusy(false);
     }
   }
+  if (invalid.current)
+    return (
+      <InvalidatedWork
+        label="Configurações"
+        text={JSON.stringify(draft, null, 2)}
+        onDiscard={onDiscard}
+      />
+    );
   return (
     <form className="settings-page" onSubmit={save}>
+      {pending && (
+        <section
+          className="panel settings-section"
+          role="group"
+          aria-label="Confirmar descarte"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setPending(null);
+            }
+          }}
+        >
+          <p>Há alterações não salvas.</p>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setPending(null)}
+          >
+            Continuar editando
+          </button>
+          <button
+            type="button"
+            className="danger-button"
+            onClick={() => {
+              if (work.get().busy) return;
+              const action = pending;
+              setPending(null);
+              action();
+            }}
+          >
+            Descartar e continuar
+          </button>
+        </section>
+      )}
       <fieldset disabled={busy}>
         <section className="panel settings-section">
           <h2>Contas e ponto de partida</h2>
@@ -551,13 +632,7 @@ export function SettingsPage({
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => {
-                  setDraft(structuredClone(settings));
-                  setBaseRevision(revision);
-                  setConflicted(false);
-                  setError("");
-                  setSaved(false);
-                }}
+                onClick={() => request(reset)}
               >
                 Atualizar edição
               </button>
@@ -585,7 +660,12 @@ export function SettingsPage({
             type="button"
             className="secondary-button"
             disabled={busy}
-            onClick={onRestore}
+            onClick={() =>
+              request(() => {
+                reset();
+                onRestore();
+              })
+            }
           >
             Restaurar backup JSON
           </button>

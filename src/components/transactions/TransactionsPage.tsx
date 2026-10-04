@@ -1,8 +1,9 @@
 import { LocalConflictError } from "../../services/transactionRepository";
 import { useMemo, useState } from "react";
+import { useUnsavedWork } from "../../hooks/useUnsavedWork";
 import { Download, Search, Upload } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
-import { Dialog } from "../ui/Dialog";
+import { Dialog, DialogClose } from "../ui/Dialog";
 import { TransactionTable, sortTransactions } from "./TransactionTable";
 import { money } from "../../utils/format";
 import { summarize } from "../../features/dashboard/calculations";
@@ -32,7 +33,12 @@ export function TransactionsPage({
     transaction: Transaction;
     revision: number;
   }>();
-  const [busy, setBusy] = useState(false);
+  const work = useUnsavedWork();
+  const [busy, setBusyState] = useState(false);
+  const setBusy = (value: boolean) => {
+    work.set({ busy: value });
+    setBusyState(value);
+  };
   const [error, setError] = useState("");
   const [conflicted, setConflicted] = useState(false);
   const filtered = useMemo(
@@ -206,6 +212,7 @@ export function TransactionsPage({
       {deleting && (
         <Dialog
           title="Excluir transação?"
+          work={work}
           busy={busy}
           onClose={() => setDeleting(undefined)}
         >
@@ -220,17 +227,12 @@ export function TransactionsPage({
             </p>
           )}
           <div className="dialog-actions">
-            <button
-              className="secondary-button"
-              disabled={busy}
-              onClick={() => setDeleting(undefined)}
-            >
-              Cancelar
-            </button>
+            <DialogClose disabled={busy}>Cancelar</DialogClose>
             <button
               className="danger-button"
               disabled={busy || conflicted}
               onClick={async () => {
+                if (work.get().busy) return;
                 setBusy(true);
                 try {
                   await onDelete(deleting.transaction.id, deleting.revision);

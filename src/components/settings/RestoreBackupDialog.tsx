@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useUnsavedWork } from "../../hooks/useUnsavedWork";
 import type { FinanceSnapshot } from "../../types/finance";
 import {
   BackupValidationError,
@@ -12,25 +13,41 @@ import {
   RestoreError,
   type LocalRead,
 } from "../../services/transactionRepository";
-import { Dialog } from "../ui/Dialog";
+import { Dialog, DialogClose } from "../ui/Dialog";
 import { RecoveryGuidance } from "./LocalDataRecovery";
 
 export function RestoreBackupDialog({
   readForBackup,
   onRestore,
   onClose,
+  invalidationKey = 0,
 }: {
   readForBackup: () => Promise<LocalRead>;
   onRestore: (snapshot: FinanceSnapshot, previous: LocalRead) => Promise<void>;
   onClose: () => void;
+  invalidationKey?: number;
 }) {
+  const work = useUnsavedWork();
+  const generation = useRef(0);
+  const lastKey = useRef(invalidationKey);
+  if (lastKey.current !== invalidationKey) {
+    generation.current++;
+    lastKey.current = invalidationKey;
+  }
   const [backup, setBackup] = useState<BackupV2 | null>(null);
   const [safety, setSafety] = useState<LocalRead | null>(null);
-  const [busy, setBusy] = useState("");
+  const [busy, setBusyState] = useState("");
+  const setBusy = (value: string) => {
+    work.set({ busy: !!value });
+    setBusyState(value);
+  };
   const [error, setError] = useState("");
   const [verificationFailed, setVerificationFailed] = useState(false);
   const [safetyFailed, setSafetyFailed] = useState(false);
   const active = useRef(false);
+  useLayoutEffect(() => {
+    setSafety(null);
+  }, [invalidationKey]);
   const preview = useMemo(
     () => (backup ? backupPreview(backup) : null),
     [backup],
@@ -39,6 +56,7 @@ export function RestoreBackupDialog({
     if (active.current) return;
     active.current = true;
     setBackup(null);
+    work.set({ hasUnsavedWork: false });
     setSafety(null);
     setSafetyFailed(false);
     setError("");
@@ -48,6 +66,7 @@ export function RestoreBackupDialog({
         const content = await file.text();
         await new Promise((resolve) => setTimeout(resolve, 0));
         setBackup(parseBackup(content));
+        work.set({ hasUnsavedWork: true });
       }
     } catch (cause) {
       setError(
@@ -63,12 +82,14 @@ export function RestoreBackupDialog({
   async function safetyDownload() {
     if (!backup || active.current) return;
     active.current = true;
+    const started = generation.current;
     setSafety(null);
     setSafetyFailed(false);
     setError("");
     setBusy("Preparando o backup de segurança…");
     try {
       const current = await readForBackup();
+      if (generation.current !== started) return;
       const content = serializeBackup(current.snapshot);
       download(
         content,
@@ -89,11 +110,14 @@ export function RestoreBackupDialog({
   async function restore() {
     if (!backup || !safety || active.current) return;
     active.current = true;
+    const started = generation.current;
     setError("");
     setBusy("Restaurando e verificando os dados…");
     try {
       await new Promise((resolve) => setTimeout(resolve, 0));
+      if (generation.current !== started) return;
       await onRestore(backup, safety);
+      work.set({ hasUnsavedWork: false });
     } catch (cause) {
       setSafety(null);
       setVerificationFailed(
@@ -110,7 +134,12 @@ export function RestoreBackupDialog({
     }
   }
   return (
-    <Dialog title="Restaurar backup JSON" onClose={onClose} busy={!!busy}>
+    <Dialog
+      title="Restaurar backup JSON"
+      onClose={onClose}
+      busy={!!busy}
+      work={work}
+    >
       <p className="dialog-description">
         O backup substituirá todas as transações e configurações salvas neste
         navegador. Feche outras abas do Vértice antes de continuar. Edições
@@ -159,14 +188,9 @@ export function RestoreBackupDialog({
       )}
       {safetyFailed && <RecoveryGuidance />}
       <div className="dialog-actions row-actions">
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={!!busy}
-          onClick={onClose}
-        >
+        <DialogClose disabled={!!busy}>
           {verificationFailed ? "Fechar" : "Cancelar"}
-        </button>
+        </DialogClose>
         {!verificationFailed && (
           <>
             <button

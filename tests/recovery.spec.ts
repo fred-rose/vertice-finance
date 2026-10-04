@@ -123,6 +123,7 @@ test("recovery abre preview; safety bloqueia; cancelar preserva toda a origem", 
     dialog.getByText(/não mescla dados nem recupera alterações/),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "Cancelar" }).click();
+  await dialog.getByRole("button", { name: "Descartar e fechar" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();

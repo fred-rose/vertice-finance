@@ -1,5 +1,8 @@
 import { LocalConflictError } from "../../services/transactionRepository";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { type WorkOwner, useInvalidated } from "../../hooks/useUnsavedWork";
+import { editableKey } from "../../hooks/unsavedWork";
+import { InvalidatedWork } from "../ui/InvalidatedWork";
 import { LoaderCircle, Plus } from "lucide-react";
 import type {
   FinanceSettings,
@@ -19,6 +22,9 @@ export function TransactionForm({
   setBusy,
   onSave,
   onClose,
+  work,
+  invalidated = false,
+  wrap = (content) => content,
 }: {
   settings: FinanceSettings;
   transaction?: Transaction;
@@ -26,15 +32,41 @@ export function TransactionForm({
   setBusy: (busy: boolean) => void;
   onSave: (input: NewTransaction) => Promise<void>;
   onClose: () => void;
+  work: WorkOwner;
+  invalidated?: boolean;
+  wrap?: (content: ReactNode) => ReactNode;
 }) {
+  const invalid = useInvalidated(invalidated);
+  const formRef = useRef<HTMLFormElement>(null);
+  const base = useRef<string | null>(null);
+  const draft = useRef<Record<string, string>>({});
+  const [initialSettings] = useState(settings);
+  const [initialDate] = useState(() => transaction?.date ?? localDate());
   const [type, setType] = useState<TransactionType>(
     transaction?.type ?? "expense",
   );
   const [error, setError] = useState("");
   const [conflicted, setConflicted] = useState(false);
+  function capture(nextType = type) {
+    if (!formRef.current || invalid.current || busy) return;
+    const projection = {
+      ...Object.fromEntries(new FormData(formRef.current).entries()),
+      type: nextType,
+    } as Record<string, string>;
+    const key = editableKey(projection);
+    if (base.current === null) base.current = key;
+    draft.current = projection;
+    work.set({ hasUnsavedWork: key !== base.current });
+  }
+  useLayoutEffect(() => {
+    capture();
+  });
+  useLayoutEffect(() => {
+    if (invalid.current) work.set({ invalidated: true });
+  }, [invalidated, work, invalid]);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (busy || conflicted) return;
+    if (busy || work.get().busy || conflicted || invalid.current) return;
     const form = new FormData(e.currentTarget);
     const base = {
       amount: parseAmount(String(form.get("amount"))),
@@ -57,6 +89,8 @@ export function TransactionForm({
       const valid = validateTransaction(input, settings);
       setBusy(true);
       await onSave(valid);
+      if (invalid.current) return;
+      work.set({ hasUnsavedWork: false });
       onClose();
     } catch (e) {
       setConflicted(e instanceof LocalConflictError);
@@ -69,8 +103,16 @@ export function TransactionForm({
       setBusy(false);
     }
   }
-  return (
-    <form onSubmit={submit}>
+  if (invalid.current)
+    return (
+      <InvalidatedWork
+        label="Transação"
+        text={JSON.stringify(draft.current, null, 2)}
+        onDiscard={onClose}
+      />
+    );
+  return wrap(
+    <form ref={formRef} onChange={() => capture()} onSubmit={submit}>
       <fieldset disabled={busy}>
         <div className="type-selector" aria-label="Tipo de transação">
           {(["expense", "income", "transfer"] as const).map((value, i) => (
@@ -80,6 +122,7 @@ export function TransactionForm({
               aria-pressed={type === value}
               className={type === value ? "selected" : ""}
               onClick={() => {
+                capture(value);
                 setType(value);
                 setError("");
               }}
@@ -127,7 +170,7 @@ export function TransactionForm({
                     : undefined
                 }
               >
-                {settings.categories
+                {initialSettings.categories
                   .filter((c) => c.type === type)
                   .map((c) => (
                     <option value={c.id} key={c.id}>
@@ -140,7 +183,7 @@ export function TransactionForm({
           <label>
             {type === "transfer" ? "Conta de origem" : "Conta"}
             <select name="accountId" defaultValue={transaction?.accountId}>
-              {settings.accounts.map((a) => (
+              {initialSettings.accounts.map((a) => (
                 <option value={a.id} key={a.id}>
                   {a.name}
                 </option>
@@ -153,10 +196,11 @@ export function TransactionForm({
               <select
                 name="destinationAccountId"
                 defaultValue={
-                  transaction?.destinationAccountId ?? settings.accounts[1]?.id
+                  transaction?.destinationAccountId ??
+                  initialSettings.accounts[1]?.id
                 }
               >
-                {settings.accounts.map((a) => (
+                {initialSettings.accounts.map((a) => (
                   <option value={a.id} key={a.id}>
                     {a.name}
                   </option>
@@ -172,7 +216,7 @@ export function TransactionForm({
               required
               min="1900-01-01"
               max={localDate()}
-              defaultValue={transaction?.date ?? localDate()}
+              defaultValue={initialDate}
             />
           </label>
         </div>
@@ -218,6 +262,6 @@ export function TransactionForm({
           {busy ? "Salvando…" : "Salvar transação"}
         </button>
       </fieldset>
-    </form>
+    </form>,
   );
 }

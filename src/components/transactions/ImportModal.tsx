@@ -1,5 +1,7 @@
 import { LocalConflictError } from "../../services/transactionRepository";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useInvalidated, useUnsavedWork } from "../../hooks/useUnsavedWork";
+import { InvalidatedWork } from "../ui/InvalidatedWork";
 import { Dialog } from "../ui/Dialog";
 import type {
   FinanceSettings,
@@ -19,12 +21,28 @@ export function ImportModal({
   transactions,
   onImport,
   onClose,
+  invalidated = false,
 }: {
   settings: FinanceSettings;
   transactions: Transaction[];
   onImport: (items: NewTransaction[], skip: boolean) => Promise<number>;
   onClose: () => void;
+  invalidated?: boolean;
 }) {
+  const work = useUnsavedWork();
+  const invalidatedRef = useInvalidated(invalidated);
+  useLayoutEffect(() => {
+    if (
+      invalidatedRef.current &&
+      !work.get().hasUnsavedWork &&
+      !work.get().busy
+    )
+      onClose();
+  }, [invalidated, invalidatedRef, work, onClose]);
+  const lastPreview = useRef<ReturnType<typeof previewImport>>([]);
+  useLayoutEffect(() => {
+    if (invalidatedRef.current) work.set({ invalidated: true });
+  }, [invalidated, invalidatedRef, work]);
   const [sheets, setSheets] = useState<ImportSheet[]>([]);
   const [sheet, setSheet] = useState(0);
   const [mapping, setMapping] = useState<Mapping>(suggestMapping([]));
@@ -43,27 +61,33 @@ export function ImportModal({
     settings.categories.find((c) => c.type === "income")!.id,
   );
   const [skip, setSkip] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  const setBusy = (value: boolean) => {
+    work.set({ busy: value });
+    setBusyState(value);
+  };
   const [error, setError] = useState("");
   const [conflicted, setConflicted] = useState(false);
   const [result, setResult] = useState<number>();
   const rows = sheets[sheet]?.rows ?? [];
   const preview = useMemo(
     () =>
-      previewImport(
-        rows,
-        mapping,
-        settings,
-        {
-          decimal,
-          dateFormat,
-          defaultType,
-          accountId,
-          expenseCategoryId,
-          incomeCategoryId,
-        },
-        transactions,
-      ),
+      invalidatedRef.current
+        ? lastPreview.current
+        : previewImport(
+            rows,
+            mapping,
+            settings,
+            {
+              decimal,
+              dateFormat,
+              defaultType,
+              accountId,
+              expenseCategoryId,
+              incomeCategoryId,
+            },
+            transactions,
+          ),
     [
       rows,
       mapping,
@@ -77,14 +101,17 @@ export function ImportModal({
       transactions,
     ],
   );
+  if (!invalidatedRef.current) lastPreview.current = preview;
   const invalid = preview.filter((r) => r.error);
   const duplicateCount = preview.filter((r) => r.duplicate).length;
   async function read(file: File, delimiter: string) {
+    if (invalidatedRef.current || work.get().busy) return;
     setBusy(true);
     setError("");
     setSheets([]);
     try {
       const loaded = await readSpreadsheet(file, delimiter || undefined);
+      if (invalidatedRef.current) return;
       if (!loaded.length || loaded[0].rows.length < 2)
         throw new Error("Inclua cabeçalho e pelo menos uma transação.");
       setSheets(loaded);
@@ -92,14 +119,51 @@ export function ImportModal({
       setMapping(suggestMapping(loaded[0].rows[0]));
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Não foi possível ler a planilha.",
+        !navigator.onLine &&
+          /\.xlsx$/i.test(file.name) &&
+          e instanceof TypeError
+          ? "Para usar XLSX offline, abra uma planilha XLSX uma vez com conexão. Você também pode importar CSV offline."
+          : e instanceof Error
+            ? e.message
+            : "Não foi possível ler a planilha.",
       );
     } finally {
       setBusy(false);
     }
   }
+  if (invalidatedRef.current)
+    return (
+      <InvalidatedWork
+        label="Importação"
+        text={JSON.stringify(
+          {
+            arquivo: file?.name,
+            separator,
+            sheet,
+            mapping,
+            decimal,
+            dateFormat,
+            defaultType,
+            accountId,
+            expenseCategoryId,
+            incomeCategoryId,
+            skip,
+            preview: lastPreview.current,
+          },
+          null,
+          2,
+        )}
+        onDiscard={onClose}
+      />
+    );
   return (
-    <Dialog title="Importar planilha" wide busy={busy} onClose={onClose}>
+    <Dialog
+      title="Importar planilha"
+      wide
+      busy={busy}
+      onClose={onClose}
+      work={work}
+    >
       {result !== undefined ? (
         <div className="empty-state">
           <h3>Importação concluída</h3>
@@ -126,6 +190,7 @@ export function ImportModal({
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) {
+                    work.set({ hasUnsavedWork: true });
                     setFile(f);
                     void read(f, separator);
                   }
@@ -371,6 +436,8 @@ export function ImportModal({
                     (skip && duplicateCount === preview.length)
                   }
                   onClick={async () => {
+                    if (invalidatedRef.current || conflicted || work.get().busy)
+                      return;
                     setBusy(true);
                     setError("");
                     try {
@@ -380,6 +447,8 @@ export function ImportModal({
                         ),
                         skip,
                       );
+                      if (invalidatedRef.current) return;
+                      work.set({ hasUnsavedWork: false });
                       setResult(count);
                     } catch (e) {
                       setConflicted(e instanceof LocalConflictError);

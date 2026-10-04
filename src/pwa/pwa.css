@@ -1,0 +1,50 @@
+.pwa-controls {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid #ffffff12;
+  border-radius: 9px;
+  background: #181e1a;
+}
+.pwa-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pwa-action p {
+  flex: 1 1 240px;
+  color: #b1beb5;
+  font-size: 12px;
+}
+.pwa-controls .text-link {
+  margin-top: 8px;
+  text-align: left;
+}
+.app-layout {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.sidebar {
+  top: env(safe-area-inset-top);
+  left: env(safe-area-inset-left);
+  bottom: env(safe-area-inset-bottom);
+}
+.toast {
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  right: calc(24px + env(safe-area-inset-right));
+}
+.transaction-dialog {
+  max-width: calc(
+    100% - 28px - env(safe-area-inset-left) - env(safe-area-inset-right)
+  );
+  max-height: calc(
+    90dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
+}
+@media (max-width: 700px) {
+  .toast {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    right: calc(16px + env(safe-area-inset-right));
+  }
+}

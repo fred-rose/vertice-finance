@@ -123,6 +123,7 @@ for (const action of ["Cancelar", "Fechar", "Escape"] as const) {
     if (action === "Escape") await page.keyboard.press("Escape");
     else
       await dialog.getByRole("button", { name: action, exact: true }).click();
+    await dialog.getByRole("button", { name: "Descartar e fechar" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(
       page.getByRole("button", { name: "Restaurar backup JSON", exact: true }),
@@ -151,6 +152,7 @@ test("cancelar após download e trocar arquivo descartam apenas o draft de resto
     dialog.getByRole("button", { name: "Restaurar este backup" }),
   ).toBeDisabled();
   await dialog.getByRole("button", { name: "Cancelar" }).click();
+  await dialog.getByRole("button", { name: "Descartar e fechar" }).click();
   expect(await persisted(page)).toEqual(before);
 });
 
