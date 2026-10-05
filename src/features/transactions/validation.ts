@@ -1,16 +1,22 @@
 import type { FinanceSettings, NewTransaction } from "../../types/finance";
 import { localDate } from "../../utils/format";
+import {
+  fromLegacyReais,
+  hasLegacyPrecision,
+  MoneyError,
+  parseMinorUnits,
+  toLegacyReais,
+} from "../../utils/money";
 
 export function parseAmount(text: string, decimal: "," | "." = ","): number {
-  let value = text.trim().replace(/R\$|\s/g, "");
-  if (decimal === ",") {
-    if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(value)) return NaN;
-    value = value.replace(/\./g, "").replace(",", ".");
-  } else {
-    if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(value)) return NaN;
-    value = value.replace(/,/g, "");
+  try {
+    const value = parseMinorUnits(text, decimal);
+    // API legada: sinal do zero e NaN de parsing continuam nas bordas da UI.
+    return value === 0 && text.includes("-") ? -0 : toLegacyReais(value);
+  } catch (error) {
+    if (error instanceof MoneyError) return NaN;
+    throw error;
   }
-  return Number(value);
 }
 export function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -36,7 +42,7 @@ export function validateTransaction(
     !Number.isFinite(input.amount) ||
     input.amount < 0.01 ||
     input.amount > 999999999 ||
-    Math.abs(input.amount * 100 - Math.round(input.amount * 100)) > 0.00001
+    !hasLegacyPrecision(input.amount, "transaction")
   )
     throw new Error(
       "Informe um valor entre R$ 0,01 e R$ 999.999.999,00, com até duas casas decimais.",
@@ -67,7 +73,7 @@ export function validateTransaction(
       ...input,
       categoryId: "transfer",
       description: input.description.trim(),
-      amount: Math.round(input.amount * 100) / 100,
+      amount: toLegacyReais(fromLegacyReais(input.amount)),
     };
   }
   if (
@@ -82,7 +88,7 @@ export function validateTransaction(
     ...input,
     destinationAccountId: undefined,
     description: input.description.trim(),
-    amount: Math.round(input.amount * 100) / 100,
+    amount: toLegacyReais(fromLegacyReais(input.amount)),
   };
 }
 export function validateSettings(
@@ -93,7 +99,7 @@ export function validateSettings(
     Number.isFinite(n) &&
     (negative || n >= 0) &&
     Math.abs(n) <= 999999999 &&
-    Math.abs(n * 100 - Math.round(n * 100)) < 0.00001;
+    hasLegacyPrecision(n, "settings");
   const unique = (items: { id: string; name: string }[]) =>
     new Set(items.map((x) => x.id)).size === items.length &&
     new Set(items.map((x) => x.name.trim().toLocaleLowerCase())).size ===
@@ -156,7 +162,7 @@ export function validateSettings(
 export const transactionSignature = (t: NewTransaction) =>
   JSON.stringify([
     t.type,
-    Math.round(t.amount * 100),
+    fromLegacyReais(t.amount),
     t.categoryId,
     t.description.trim().toLowerCase(),
     t.accountId,
