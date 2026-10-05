@@ -1,6 +1,6 @@
 import { Utensils, Car, Sparkles, Repeat2, Shapes } from "lucide-react";
 import type { aggregateCategories } from "../../features/dashboard/calculations";
-import { changeLabel, money } from "../../utils/format";
+import { changeLabel, moneyFromCalculation as money } from "../../utils/format";
 const icons = {
   food: Utensils,
   transport: Car,
@@ -37,7 +37,7 @@ export function CategoryBreakdown({
         const Icon = icons[category.id as keyof typeof icons] ?? Shapes;
         return (
           <div
-            className={`category-row ${(category.budgetPercent !== null && category.budgetPercent >= 80) || (category.change !== null && category.change >= 20) ? "category-attention" : ""}`}
+            className={`category-row ${category.attention ? "category-attention" : ""}`}
             key={category.id}
           >
             <span className="category-icon" style={{ color: category.color }}>

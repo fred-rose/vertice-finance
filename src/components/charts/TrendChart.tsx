@@ -9,17 +9,16 @@ import {
   YAxis,
 } from "recharts";
 import type { monthlyData } from "../../features/dashboard/calculations";
-import { money } from "../../utils/format";
-export function TrendChart({ data }: { data: ReturnType<typeof monthlyData> }) {
+import { moneyFromCalculation as money } from "../../utils/format";
+export function TrendChart({
+  data,
+  average,
+}: {
+  data: ReturnType<typeof monthlyData>;
+  average: number | null;
+}) {
   const recorded = data.filter((month) => month.balance !== null);
-  const average = recorded.length
-    ? Math.round(
-        recorded.reduce(
-          (sum, month) => sum + Math.round(month.balance! * 100),
-          0,
-        ) / recorded.length,
-      ) / 100
-    : null;
+  // average foi calculado em centavos checked, antes da borda Recharts.
   if (recorded.length < 2)
     return (
       <section className="panel trend-panel history-start">

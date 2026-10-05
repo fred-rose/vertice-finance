@@ -5,7 +5,11 @@ import { Download, Search, Upload } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
 import { Dialog, DialogClose } from "../ui/Dialog";
 import { TransactionTable, sortTransactions } from "./TransactionTable";
-import { money } from "../../utils/format";
+import {
+  calculationUnavailable,
+  moneyFromCalculation as money,
+} from "../../utils/format";
+import { MoneyError } from "../../utils/money";
 import { summarize } from "../../features/dashboard/calculations";
 import { downloadTransactions } from "../../features/transactions/importExport";
 export function TransactionsPage({
@@ -59,7 +63,12 @@ export function TransactionsPage({
       ),
     [transactions, month, type, account, category, search],
   );
-  const total = summarize(filtered);
+  let total;
+  try {
+    total = summarize(filtered);
+  } catch (error) {
+    if (!(error instanceof MoneyError)) throw error;
+  }
   const pages = Math.max(1, Math.ceil(filtered.length / 20));
   const currentPage = Math.min(page, pages);
   return (
@@ -163,8 +172,15 @@ export function TransactionsPage({
         </label>
       </div>
       <p className="filter-summary">
-        {filtered.length} lançamentos no filtro · Entradas {money(total.income)}{" "}
-        · Saídas {money(total.expenses)} · Resultado {money(total.balance)}
+        {filtered.length} lançamentos no filtro ·{" "}
+        {total ? (
+          <>
+            Entradas {money(total.income)} · Saídas {money(total.expenses)} ·
+            Resultado {money(total.balance)}
+          </>
+        ) : (
+          <span role="status">{calculationUnavailable}</span>
+        )}
         <span>
           Transferências não compõem o resultado. A exportação inclui todos os
           registros do filtro.

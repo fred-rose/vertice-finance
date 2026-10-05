@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { Plus, Upload, Wallet } from "lucide-react";
-import type { FinanceSettings, Transaction } from "../../types/finance";
+import type {
+  Account,
+  FinanceSettings,
+  Transaction,
+} from "../../types/finance";
 import { FinancialSummary } from "./FinancialSummary";
 import { CategoryBreakdown } from "./CategoryBreakdown";
 import { InsightPanel } from "./InsightPanel";
@@ -13,9 +17,15 @@ import {
   comparablePeriods,
   generateInsights,
   monthlyData,
-  summarize,
+  monthlyBalanceAverage,
+  compareSummaries,
 } from "../../features/dashboard/calculations";
-import { accountBalanceLabel, money } from "../../utils/format";
+import {
+  calculationUnavailable,
+  accountBalanceLabel,
+  moneyFromCalculation as money,
+} from "../../utils/format";
+import { MoneyError } from "../../utils/money";
 export function OverviewPage({
   transactions,
   settings,
@@ -31,20 +41,38 @@ export function OverviewPage({
 }) {
   const dashboard = useMemo(() => {
     const periods = comparablePeriods(transactions, selected);
-    return {
-      ...periods,
-      summary: summarize(periods.current),
-      prior: summarize(periods.previous),
-      categories: aggregateCategories(
-        periods.current,
-        periods.previous,
-        settings.categories,
-      ),
-      trend: monthlyData(transactions, selected),
-      insights: generateInsights(transactions, selected, settings),
-      projection: closingProjection(transactions, selected),
-    };
+    try {
+      const comparison = compareSummaries(periods.current, periods.previous);
+      return {
+        ...periods,
+        summary: comparison.current,
+        prior: comparison.previous,
+        changes: comparison.changes,
+        categories: aggregateCategories(
+          periods.current,
+          periods.previous,
+          settings.categories,
+        ),
+        trend: monthlyData(transactions, selected),
+        trendAverage: monthlyBalanceAverage(transactions, selected),
+        insights: generateInsights(transactions, selected, settings),
+        projection: closingProjection(transactions, selected),
+      };
+    } catch (error) {
+      if (!(error instanceof MoneyError)) throw error;
+      return undefined;
+    }
   }, [transactions, selected, settings]);
+  // Mantém a avaliação por render e o default temporal já existente.
+  function balanceLabel(account: Account) {
+    try {
+      const balance = accountBalance(account, transactions);
+      return balance === null ? accountBalanceLabel(null) : money(balance);
+    } catch (error) {
+      if (!(error instanceof MoneyError)) throw error;
+      return calculationUnavailable;
+    }
+  }
   if (!transactions.length)
     return (
       <section className="panel welcome-panel">
@@ -89,6 +117,21 @@ export function OverviewPage({
         </p>
       </section>
     );
+  if (!dashboard)
+    return (
+      <>
+        <p className="form-error" role="status">
+          {calculationUnavailable}
+        </p>
+        <button className="primary-button mobile-add" onClick={onAdd}>
+          <Plus size={18} /> Adicionar transação
+        </button>
+        <RecentTransactions
+          transactions={comparablePeriods(transactions, selected).current}
+          settings={settings}
+        />
+      </>
+    );
   return (
     <>
       {dashboard.current.length ? (
@@ -96,6 +139,7 @@ export function OverviewPage({
           <FinancialSummary
             current={dashboard.summary}
             previous={dashboard.prior}
+            changes={dashboard.changes}
           />
           <p className="period-context">{dashboard.label}</p>
         </>
@@ -115,7 +159,7 @@ export function OverviewPage({
       <div className="dashboard-sections">
         <InsightPanel insights={dashboard.insights} />
         <div className="charts-grid">
-          <TrendChart data={dashboard.trend} />
+          <TrendChart data={dashboard.trend} average={dashboard.trendAverage} />
           {dashboard.current.some((t) => t.type === "expense") ? (
             <CategoryBreakdown
               data={dashboard.categories.filter(
@@ -152,9 +196,7 @@ export function OverviewPage({
             {settings.accounts.map((a) => (
               <div key={a.id}>
                 <span>{a.name}</span>
-                <strong>
-                  {accountBalanceLabel(accountBalance(a, transactions))}
-                </strong>
+                <strong>{balanceLabel(a)}</strong>
                 <small>
                   Desde {a.initialBalanceDate.split("-").reverse().join("/")} ·
                   inclui transferências

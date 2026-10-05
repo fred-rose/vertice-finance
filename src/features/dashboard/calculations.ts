@@ -3,40 +3,99 @@ import type {
   Category,
   FinancialSummary,
   FinanceSettings,
+  Goal,
   Insight,
   Transaction,
 } from "../../types/finance";
 import { categories as defaultCategories } from "../../data/catalog";
-import { localDate, money, monthKey } from "../../utils/format";
+import { localDate, moneyMinor, monthKey } from "../../utils/format";
+import {
+  checkedAdd,
+  checkedSubtract,
+  compareScaled,
+  fromLegacyReais,
+  minorUnits,
+  multiplyDivideRounded,
+  toLegacyReais,
+  type MinorUnits,
+} from "../../utils/money";
 import { validDate } from "../transactions/validation";
-const cents = (value: number) => Math.round(value * 100);
-export const totalIncome = (items: Transaction[]) =>
-  items
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + cents(t.amount), 0) / 100;
-export const totalExpenses = (items: Transaction[]) =>
-  items
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + cents(t.amount), 0) / 100;
-export const netBalance = (items: Transaction[]) =>
-  (cents(totalIncome(items)) - cents(totalExpenses(items))) / 100;
-export const percentageChange = (current: number, previous: number) =>
-  previous === 0 ? null : ((current - previous) / Math.abs(previous)) * 100;
-export const forMonth = (items: Transaction[], date: Date) =>
-  items.filter((t) => t.date.startsWith(monthKey(date)));
-export function summarize(items: Transaction[]): FinancialSummary {
-  const income = totalIncome(items),
-    expenses = totalExpenses(items);
+
+// DTOs persistidos são R$. Cada entrada atravessa o adapter; intermediários
+// permanecem centavos. Wrappers públicos convertem apenas o resultado final.
+const zero = minorUnits(0);
+function totalMinor(
+  items: Transaction[],
+  type: "income" | "expense",
+): MinorUnits {
+  return items
+    .filter((t) => t.type === type)
+    .reduce((sum, t) => checkedAdd(sum, fromLegacyReais(t.amount)), zero);
+}
+function summaryMinor(items: Transaction[]) {
+  const income = totalMinor(items, "income"),
+    expenses = totalMinor(items, "expense");
+  const balance = checkedSubtract(income, expenses);
   return {
     income,
     expenses,
-    balance: netBalance(items),
-    savingsRate:
-      income > 0
-        ? ((cents(income) - cents(expenses)) / cents(income)) * 100
-        : null,
+    balance,
+    savingsRate: income > 0 ? (balance / income) * 100 : null,
   };
 }
+function summaryReais(
+  summary: ReturnType<typeof summaryMinor>,
+): FinancialSummary {
+  return {
+    income: toLegacyReais(summary.income),
+    expenses: toLegacyReais(summary.expenses),
+    balance: toLegacyReais(summary.balance),
+    savingsRate: summary.savingsRate,
+  };
+}
+function changeMinor(current: MinorUnits, previous: MinorUnits) {
+  return previous === 0
+    ? null
+    : (checkedSubtract(current, previous) / Math.abs(previous)) * 100;
+}
+function budgetMinor(budget?: number) {
+  return budget && budget > 0 ? fromLegacyReais(budget, "settings") : null;
+}
+function budgetPercent(amount: MinorUnits, budget: MinorUnits | null) {
+  return budget === null ? null : (amount / budget) * 100;
+}
+export const totalIncome = (items: Transaction[]) =>
+  toLegacyReais(totalMinor(items, "income"));
+export const totalExpenses = (items: Transaction[]) =>
+  toLegacyReais(totalMinor(items, "expense"));
+export const netBalance = (items: Transaction[]) =>
+  toLegacyReais(summaryMinor(items).balance);
+export const percentageChange = (current: number, previous: number) =>
+  changeMinor(fromLegacyReais(current), fromLegacyReais(previous));
+export const forMonth = (items: Transaction[], date: Date) =>
+  items.filter((t) => t.date.startsWith(monthKey(date)));
+export function summarize(items: Transaction[]): FinancialSummary {
+  return summaryReais(summaryMinor(items));
+}
+// A composição dos cards calcula diferenças antes de converter as saídas R$.
+export function compareSummaries(
+  items: Transaction[],
+  previous: Transaction[],
+) {
+  const current = summaryMinor(items),
+    prior = summaryMinor(previous);
+  const changes = {
+    income: changeMinor(current.income, prior.income),
+    expenses: changeMinor(current.expenses, prior.expenses),
+    balance: changeMinor(current.balance, prior.balance),
+  };
+  return {
+    current: summaryReais(current),
+    previous: summaryReais(prior),
+    changes,
+  };
+}
+
 export function comparablePeriods(
   items: Transaction[],
   selected: Date,
@@ -63,14 +122,15 @@ export function comparablePeriods(
     partial,
   };
 }
+
 export const budgetUsed = (amount: number, budget?: number) =>
-  budget && budget > 0 ? (cents(amount) / cents(budget)) * 100 : null;
-export function aggregateCategories(
+  budgetPercent(fromLegacyReais(amount), budgetMinor(budget));
+function categoriesMinor(
   items: Transaction[],
   previous: Transaction[],
-  catalog: Category[] = defaultCategories,
+  catalog: Category[],
 ) {
-  const total = totalExpenses(items);
+  const total = totalMinor(items, "expense");
   const known = catalog.filter((c) => c.type === "expense");
   const unknown = [
     ...new Set(
@@ -93,23 +153,44 @@ export function aggregateCategories(
   ];
   return all
     .map((category) => {
-      const amount = totalExpenses(
+      const amount = totalMinor(
         items.filter((t) => t.categoryId === category.id),
+        "expense",
       );
-      const before = totalExpenses(
+      const before = totalMinor(
         previous.filter((t) => t.categoryId === category.id),
+        "expense",
       );
+      const budget = budgetMinor(category.monthlyBudget);
       return {
-        ...category,
+        category,
         amount,
         share: total ? (amount / total) * 100 : 0,
-        change: percentageChange(amount, before),
-        budgetPercent: budgetUsed(amount, category.monthlyBudget),
+        change: changeMinor(amount, before),
+        budget,
+        budgetPercent: budgetPercent(amount, budget),
+        attention:
+          (budget !== null && compareScaled(amount, 100, budget, 80) >= 0) ||
+          (before > 0 && compareScaled(amount, 100, before, 120) >= 0),
       };
     })
     .sort((a, b) => b.amount - a.amount);
 }
-export function monthlyData(items: Transaction[], selected: Date) {
+export function aggregateCategories(
+  items: Transaction[],
+  previous: Transaction[],
+  catalog: Category[] = defaultCategories,
+) {
+  return categoriesMinor(items, previous, catalog).map((c) => ({
+    ...c.category,
+    amount: toLegacyReais(c.amount),
+    share: c.share,
+    change: c.change,
+    budgetPercent: c.budgetPercent,
+    attention: c.attention,
+  }));
+}
+function monthlySummaries(items: Transaction[], selected: Date) {
   return Array.from({ length: 6 }, (_, index) => {
     const date = new Date(
       selected.getFullYear(),
@@ -117,23 +198,44 @@ export function monthlyData(items: Transaction[], selected: Date) {
       1,
     );
     const records = forMonth(items, date).filter((t) => t.type !== "transfer");
-    const summary = summarize(records);
     return {
+      date,
+      hasData: records.length > 0,
+      summary: summaryMinor(records),
+    };
+  });
+}
+export function monthlyData(items: Transaction[], selected: Date) {
+  return monthlySummaries(items, selected).map(
+    ({ date, hasData, summary }) => ({
       month: new Intl.DateTimeFormat("pt-BR", { month: "short" })
         .format(date)
         .replace(".", ""),
       key: monthKey(date),
-      ...summary,
-      balance: records.length ? summary.balance : null,
-      expenses: records.length ? summary.expenses : null,
-      hasData: records.length > 0,
-    };
-  });
+      ...summaryReais(summary),
+      balance: hasData ? toLegacyReais(summary.balance) : null,
+      expenses: hasData ? toLegacyReais(summary.expenses) : null,
+      hasData,
+    }),
+  );
 }
-export function movingAverage(
+// O saldo médio do gráfico também é cálculo monetário, não uma coordenada.
+export function monthlyBalanceAverage(items: Transaction[], selected: Date) {
+  const recorded = monthlySummaries(items, selected).filter((m) => m.hasData);
+  return recorded.length
+    ? toLegacyReais(
+        multiplyDivideRounded(
+          recorded.reduce((sum, m) => checkedAdd(sum, m.summary.balance), zero),
+          1,
+          recorded.length,
+        ),
+      )
+    : null;
+}
+function movingAverageMinor(
   items: Transaction[],
   selected: Date,
-  months = 3,
+  months: number,
 ) {
   const values = Array.from({ length: months }, (_, i) =>
     forMonth(
@@ -144,19 +246,30 @@ export function movingAverage(
   return {
     months: values.length,
     expenses: values.length
-      ? Math.round(
-          values.reduce((sum, rows) => sum + cents(totalExpenses(rows)), 0) /
-            values.length,
-        ) / 100
+      ? multiplyDivideRounded(
+          values.reduce(
+            (sum, rows) => checkedAdd(sum, totalMinor(rows, "expense")),
+            zero,
+          ),
+          1,
+          values.length,
+        )
       : null,
     records: values,
   };
 }
-export function closingProjection(
+export function movingAverage(
   items: Transaction[],
   selected: Date,
-  now = new Date(),
+  months = 3,
 ) {
+  const result = movingAverageMinor(items, selected, months);
+  return {
+    ...result,
+    expenses: result.expenses === null ? null : toLegacyReais(result.expenses),
+  };
+}
+function projectionMinor(items: Transaction[], selected: Date, now: Date) {
   const current = forMonth(items, selected).filter(
     (t) => t.date <= localDate(now) && t.type === "expense",
   );
@@ -166,19 +279,21 @@ export function closingProjection(
     new Set(current.map((t) => t.date)).size < 3
   )
     return null;
-  return (
-    Math.round(
-      (cents(totalExpenses(current)) *
-        new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) /
-        now.getDate(),
-    ) / 100
+  return multiplyDivideRounded(
+    totalMinor(current, "expense"),
+    new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
+    now.getDate(),
   );
 }
-export function accountBalance(
-  account: Account,
+export function closingProjection(
   items: Transaction[],
-  asOf = localDate(),
+  selected: Date,
+  now = new Date(),
 ) {
+  const result = projectionMinor(items, selected, now);
+  return result === null ? null : toLegacyReais(result);
+}
+function accountMinor(account: Account, items: Transaction[], asOf: string) {
   if (
     !Number.isFinite(account.initialBalance) ||
     !validDate(account.initialBalanceDate) ||
@@ -186,64 +301,85 @@ export function accountBalance(
     asOf < account.initialBalanceDate
   )
     return null;
-  return (
-    items
-      .filter((t) => t.date >= account.initialBalanceDate && t.date <= asOf)
-      .reduce((sum, t) => {
-        if (t.accountId === account.id)
-          sum += (t.type === "income" ? 1 : -1) * cents(t.amount);
+  return items
+    .filter((t) => t.date >= account.initialBalanceDate && t.date <= asOf)
+    .reduce(
+      (sum, t) => {
+        if (t.accountId === account.id) {
+          const amount = fromLegacyReais(t.amount);
+          sum =
+            t.type === "income"
+              ? checkedAdd(sum, amount)
+              : checkedSubtract(sum, amount);
+        }
         if (t.type === "transfer" && t.destinationAccountId === account.id)
-          sum += cents(t.amount);
+          sum = checkedAdd(sum, fromLegacyReais(t.amount));
         return sum;
-      }, cents(account.initialBalance)) / 100
-  );
+      },
+      fromLegacyReais(account.initialBalance, "settings"),
+    );
+}
+export function accountBalance(
+  account: Account,
+  items: Transaction[],
+  asOf = localDate(),
+) {
+  const result = accountMinor(account, items, asOf);
+  return result === null ? null : toLegacyReais(result);
+}
+function accountsMinor(
+  accounts: Account[],
+  items: Transaction[],
+  asOf: string,
+) {
+  const balances = accounts.map((a) => accountMinor(a, items, asOf));
+  if (!balances.length || balances.some((b) => b === null)) return null;
+  return balances.reduce<MinorUnits>((sum, b) => checkedAdd(sum, b!), zero);
 }
 export function totalAccountBalance(
   accounts: Account[],
   items: Transaction[],
   asOf = localDate(),
 ): number | null {
-  const balances = accounts.map((account) =>
-    accountBalance(account, items, asOf),
-  );
-  if (!balances.length || balances.some((balance) => balance === null))
-    return null;
-  return (
-    balances.reduce<number>((sum, balance) => sum + cents(balance!), 0) / 100
-  );
+  const result = accountsMinor(accounts, items, asOf);
+  return result === null ? null : toLegacyReais(result);
 }
 export function detectAnomalies(
   current: Transaction[],
   history: Transaction[][],
   catalog: Category[],
 ): Insight[] {
-  // A single prior month is too weak a baseline for an anomaly claim.
   if (history.length < 2) return [];
   return catalog
     .filter((c) => c.type === "expense")
     .flatMap((category) => {
-      const average =
-        Math.round(
-          history.reduce(
-            (sum, rows) =>
-              sum +
-              cents(
-                totalExpenses(rows.filter((t) => t.categoryId === category.id)),
+      const average = multiplyDivideRounded(
+        history.reduce(
+          (sum, rows) =>
+            checkedAdd(
+              sum,
+              totalMinor(
+                rows.filter((t) => t.categoryId === category.id),
+                "expense",
               ),
-            0,
-          ) / history.length,
-        ) / 100;
-      const amount = totalExpenses(
+            ),
+          zero,
+        ),
+        1,
+        history.length,
+      );
+      const amount = totalMinor(
         current.filter((t) => t.categoryId === category.id),
+        "expense",
       );
       return average > 0 &&
-        cents(amount) * 100 > cents(average) * 120 &&
-        cents(amount) - cents(average) >= 5000
+        compareScaled(amount, 100, average, 120) > 0 &&
+        checkedSubtract(amount, average) >= 5000
         ? [
             {
               id: category.id,
               title: `${category.name} fora do padrão`,
-              description: `${Math.round((amount / average - 1) * 100)}% acima da média de ${history.length} meses (${money(average)}). Revise os lançamentos desta categoria.`,
+              description: `${Math.round((amount / average - 1) * 100)}% acima da média de ${history.length} meses (${moneyMinor(average)}). Revise os lançamentos desta categoria.`,
               tone: "warning" as const,
               priority: 65 + Math.min(10, amount / average),
             },
@@ -263,16 +399,16 @@ export function generateInsights(
     now,
   );
   if (!current.some((t) => t.type !== "transfer")) return [];
-  const summary = summarize(current),
-    prior = summarize(previous);
-  const history = movingAverage(items, selected);
+  const summary = summaryMinor(current),
+    prior = summaryMinor(previous);
+  const history = movingAverageMinor(items, selected, 3);
   const catalog = settings?.categories ?? defaultCategories;
   const insights: Insight[] = [];
   if (summary.balance < 0)
     insights.push({
       id: "negative",
       title: "O período está no vermelho",
-      description: `As despesas superam as receitas em ${money(-summary.balance)}. Revise os gastos antes de assumir novos compromissos.`,
+      description: `As despesas superam as receitas em ${moneyMinor(checkedSubtract(zero, summary.balance))}. Revise os gastos antes de assumir novos compromissos.`,
       tone: "warning",
       priority: 100,
     });
@@ -281,53 +417,51 @@ export function generateInsights(
     monthKey(selected) === monthKey(now) &&
     settings.lowBalanceThreshold > 0
   ) {
-    const balance = totalAccountBalance(
-      settings.accounts,
-      items,
-      localDate(now),
-    );
-    if (balance !== null && balance < settings.lowBalanceThreshold)
+    const threshold = fromLegacyReais(settings.lowBalanceThreshold, "settings");
+    const balance = accountsMinor(settings.accounts, items, localDate(now));
+    if (balance !== null && balance < threshold)
       insights.push({
         id: "low-balance",
         title: "Sua reserva de segurança pede atenção",
-        description: `Saldo registrado nas contas: ${money(balance)}. Seu limite de atenção é ${money(settings.lowBalanceThreshold)}.`,
+        description: `Saldo registrado nas contas: ${moneyMinor(balance)}. Seu limite de atenção é ${moneyMinor(threshold)}.`,
         tone: "warning",
         priority: 95,
       });
   }
-  for (const c of aggregateCategories(current, previous, catalog)) {
-    if (c.budgetPercent !== null && c.budgetPercent >= 80)
+  for (const c of categoriesMinor(current, previous, catalog)) {
+    if (c.budget !== null && compareScaled(c.amount, 100, c.budget, 80) >= 0) {
+      const reached = c.amount >= c.budget;
       insights.push({
-        id: `budget-${c.id}`,
-        title: `${c.name}: ${c.budgetPercent >= 100 ? "orçamento atingido" : "perto do limite"}`,
-        description: `${c.budgetPercent.toFixed(0)}% de ${money(c.monthlyBudget!)} utilizado. ${c.amount > c.monthlyBudget! ? `${money(c.amount - c.monthlyBudget!)} acima do limite.` : `Restam ${money(c.monthlyBudget! - c.amount)} para o mês.`}`,
+        id: `budget-${c.category.id}`,
+        title: `${c.category.name}: ${reached ? "orçamento atingido" : "perto do limite"}`,
+        description: `${c.budgetPercent!.toFixed(0)}% de ${moneyMinor(c.budget)} utilizado. ${c.amount > c.budget ? `${moneyMinor(checkedSubtract(c.amount, c.budget))} acima do limite.` : `Restam ${moneyMinor(checkedSubtract(c.budget, c.amount))} para o mês.`}`,
         tone: "warning",
-        priority: c.budgetPercent >= 100 ? 90 : 75,
+        priority: reached ? 90 : 75,
       });
+    }
   }
-  const anomalies = detectAnomalies(current, history.records, catalog);
   insights.push(
-    ...anomalies.filter(
+    ...detectAnomalies(current, history.records, catalog).filter(
       (a) => !insights.some((i) => i.id === `budget-${a.id}`),
     ),
   );
   if (
     (!partial || summary.income > 0) &&
     prior.income > 0 &&
-    cents(summary.income) * 100 <= cents(prior.income) * 85 &&
-    cents(prior.income) - cents(summary.income) >= 5000
+    compareScaled(summary.income, 100, prior.income, 85) <= 0 &&
+    checkedSubtract(prior.income, summary.income) >= 5000
   )
     insights.push({
       id: "income-drop",
       title: "Entradas abaixo do período anterior",
-      description: `${money((cents(prior.income) - cents(summary.income)) / 100)} a menos em receitas ${partial ? "até o mesmo dia" : "no mês"}. Confira se há recebimentos pendentes.`,
+      description: `${moneyMinor(checkedSubtract(prior.income, summary.income))} a menos em receitas ${partial ? "até o mesmo dia" : "no mês"}. Confira se há recebimentos pendentes.`,
       tone: "warning",
       priority: 80,
     });
-  const delta = (cents(summary.expenses) - cents(prior.expenses)) / 100;
+  const delta = checkedSubtract(summary.expenses, prior.expenses);
   if (
     prior.expenses > 0 &&
-    Math.abs(delta) >= 50 &&
+    Math.abs(delta) >= 5000 &&
     (delta > 0 || (!partial && summary.balance >= 0))
   )
     insights.push({
@@ -336,36 +470,36 @@ export function generateInsights(
         delta > 0
           ? "O ritmo de gastos aumentou"
           : "Você reduziu suas despesas registradas",
-      description: `${money(Math.abs(delta))} ${delta > 0 ? "a mais" : "a menos"} que ${partial ? "no mesmo intervalo do mês anterior" : "no mês anterior"}.`,
+      description: `${moneyMinor(delta < 0 ? checkedSubtract(zero, delta) : delta)} ${delta > 0 ? "a mais" : "a menos"} que ${partial ? "no mesmo intervalo do mês anterior" : "no mês anterior"}.`,
       tone: delta > 0 ? "warning" : "positive",
       priority: delta > 0 ? 60 : 20,
     });
-  const projection = closingProjection(items, selected, now);
+  const projection = projectionMinor(items, selected, now);
   if (
     projection !== null &&
     history.months >= 2 &&
     history.expenses !== null &&
-    cents(projection) * 100 > cents(history.expenses) * 115 &&
-    cents(projection) - cents(history.expenses) >= 5000
+    compareScaled(projection, 100, history.expenses, 115) > 0 &&
+    checkedSubtract(projection, history.expenses) >= 5000
   )
     insights.push({
       id: "projection",
       title: "O fechamento pode superar seu histórico",
-      description: `Mantido o ritmo, saídas estimadas em ${money(projection)}: ${money(projection - history.expenses)} acima da média. Estimativa linear; depende de registros completos.`,
+      description: `Mantido o ritmo, saídas estimadas em ${moneyMinor(projection)}: ${moneyMinor(checkedSubtract(projection, history.expenses))} acima da média. Estimativa linear; depende de registros completos.`,
       tone: "warning",
       priority: 55,
     });
-  const extra = (cents(summary.balance) - cents(prior.balance)) / 100;
+  const extra = checkedSubtract(summary.balance, prior.balance);
   if (
     !partial &&
     previous.some((t) => t.type !== "transfer") &&
     summary.balance > 0 &&
-    extra >= 50
+    extra >= 5000
   )
     insights.push({
       id: "savings",
       title: "Mais espaço para seus planos",
-      description: `Sobraram ${money(extra)} a mais que no mês anterior. Considere direcionar essa diferença à sua meta.`,
+      description: `Sobraram ${moneyMinor(extra)} a mais que no mês anterior. Considere direcionar essa diferença à sua meta.`,
       tone: "positive",
       priority: 25,
     });
@@ -375,4 +509,27 @@ export function generateInsights(
         (b.priority ?? 0) - (a.priority ?? 0) || a.id.localeCompare(b.id),
     )
     .slice(0, 3);
+}
+
+// Somente projeções de planejamento: nunca normalizar ou regravar o draft.
+export function planningAmounts(settings: FinanceSettings) {
+  const fixed = settings.fixedExpenses.reduce(
+    (sum, f) => checkedAdd(sum, fromLegacyReais(f.amount, "settings")),
+    zero,
+  );
+  const available = checkedSubtract(
+    fromLegacyReais(settings.plannedIncome, "settings"),
+    fixed,
+  );
+  return { fixed, available };
+}
+export function goalProgress(goal: Goal) {
+  const target = fromLegacyReais(goal.targetAmount, "settings");
+  const current = fromLegacyReais(goal.currentAmount, "settings");
+  // Meta sem alvo positivo continua sendo um rascunho, não 0% calculado.
+  const remaining = checkedSubtract(target, current);
+  return {
+    remaining: remaining < 0 ? zero : remaining,
+    percent: target > 0 ? Math.round((current / target) * 100) : null,
+  };
 }

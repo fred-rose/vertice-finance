@@ -7,14 +7,30 @@ import { useInvalidated, useUnsavedWork } from "../../hooks/useUnsavedWork";
 import { editableKey } from "../../hooks/unsavedWork";
 import { InvalidatedWork } from "../ui/InvalidatedWork";
 import { Download, Plus } from "lucide-react";
-import type { FinanceSettings, Transaction } from "../../types/finance";
-import { accountBalance } from "../../features/dashboard/calculations";
+import type {
+  Account,
+  Goal,
+  FinanceSettings,
+  Transaction,
+} from "../../types/finance";
+import {
+  accountBalance,
+  planningAmounts,
+  goalProgress,
+} from "../../features/dashboard/calculations";
+import { MoneyError } from "../../utils/money";
 import { validateSettings } from "../../features/transactions/validation";
 import {
   downloadBackup,
   downloadTransactions,
 } from "../../features/transactions/importExport";
-import { accountBalanceLabel, localDate, money } from "../../utils/format";
+import {
+  calculationUnavailable,
+  accountBalanceLabel,
+  localDate,
+  moneyMinor,
+  moneyFromCalculation,
+} from "../../utils/format";
 
 export function SettingsPage({
   settings,
@@ -75,11 +91,33 @@ export function SettingsPage({
     if (work.get().hasUnsavedWork) setPending(() => action);
     else action();
   }
-  const fixed =
-    draft.fixedExpenses.reduce(
-      (sum, f) => sum + Math.round(f.amount * 100),
-      0,
-    ) / 100;
+  let planning;
+  try {
+    planning = planningAmounts(draft);
+  } catch (error) {
+    if (!(error instanceof MoneyError)) throw error;
+  }
+  function balanceLabel(account: Account) {
+    try {
+      const balance = accountBalance(account, transactions);
+      return balance === null
+        ? accountBalanceLabel(null)
+        : moneyFromCalculation(balance);
+    } catch (error) {
+      if (!(error instanceof MoneyError)) throw error;
+      return calculationUnavailable;
+    }
+  }
+  function goalLabel(goal: Goal) {
+    if (!(goal.targetAmount > 0)) return "Defina o valor do objetivo.";
+    try {
+      const progress = goalProgress(goal);
+      return `${progress.percent}% alcançado · faltam ${moneyMinor(progress.remaining)}`;
+    } catch (error) {
+      if (!(error instanceof MoneyError)) throw error;
+      return calculationUnavailable;
+    }
+  }
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (conflicted || busy || work.get().busy || invalid.current) return;
@@ -238,9 +276,8 @@ export function SettingsPage({
                 </label>
               </div>
               <p className="form-note">
-                Saldo calculado até hoje:{" "}
-                {accountBalanceLabel(accountBalance(a, transactions))} · inclui
-                o saldo inicial e as movimentações desde a data acima.
+                Saldo calculado até hoje: {balanceLabel(a)} · inclui o saldo
+                inicial e as movimentações desde a data acima.
               </p>
             </div>
           ))}
@@ -480,12 +517,18 @@ export function SettingsPage({
             <Plus size={15} />
             Adicionar despesa fixa
           </button>
-          {draft.plannedIncome > 0 && (
-            <p className="planning-context">
-              {money(draft.plannedIncome - fixed)} previstos após compromissos
-              fixos ({money(fixed)}). Esse valor ainda precisa cobrir gastos
-              variáveis e metas.
+          {!planning ? (
+            <p className="form-note" role="status">
+              {calculationUnavailable}
             </p>
+          ) : (
+            draft.plannedIncome > 0 && (
+              <p className="planning-context">
+                {moneyMinor(planning.available)} previstos após compromissos
+                fixos ({moneyMinor(planning.fixed)}). Esse valor ainda precisa
+                cobrir gastos variáveis e metas.
+              </p>
+            )
           )}
         </details>
         <details className="panel settings-section">
@@ -573,11 +616,7 @@ export function SettingsPage({
                   />
                 </label>
               </div>
-              <p className="form-note">
-                {g.targetAmount > 0
-                  ? `${Math.round((g.currentAmount / g.targetAmount) * 100)}% alcançado · faltam ${money(Math.max(0, g.targetAmount - g.currentAmount))}`
-                  : "Defina o valor do objetivo."}
-              </p>
+              <p className="form-note">{goalLabel(g)}</p>
               <button
                 type="button"
                 className="text-link danger-text"
