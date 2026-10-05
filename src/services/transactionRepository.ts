@@ -523,3 +523,14 @@ export const transactionRepository: TransactionRepository = {
     return { revision };
   },
 };
+
+// Explicit B2 preflight lifecycle only; production remains open(3).
+export async function closeLocalDatabaseForMigration(): Promise<void> {
+  const opening = database;
+  if (!opening) return;
+  try {
+    (await opening).close();
+  } finally {
+    if (database === opening) database = undefined;
+  }
+}
