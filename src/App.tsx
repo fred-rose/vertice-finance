@@ -18,6 +18,8 @@ import { LocalDataRecovery } from "./components/settings/LocalDataRecovery";
 import { Dialog, DialogClose } from "./components/ui/Dialog";
 import { useTransactions } from "./hooks/useTransactions";
 import { usePage } from "./hooks/usePage";
+import { useCivilToday } from "./hooks/useCivilToday";
+import { dateMonth, shiftMonth } from "./utils/civil";
 import { monthKey, monthLabel } from "./utils/format";
 import type { NewTransaction, Transaction } from "./types/finance";
 import { LocalConflictError } from "./services/transactionRepository";
@@ -32,9 +34,8 @@ export default function App() {
   const snapshot = finance.snapshot;
   const navigation = usePage();
   const page = navigation.page;
-  const [selected, setSelected] = useState(
-    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  );
+  const today = useCivilToday();
+  const [selected, setSelected] = useState(() => dateMonth(today));
   const [editor, setEditor] = useState<{
     transaction?: Transaction;
     revision: number;
@@ -143,7 +144,7 @@ export default function App() {
     if (!editor || !snapshot || editor.version !== finance.restoreVersion)
       return;
     await finance.saveTransaction(input, editor.revision, editor.transaction);
-    setSelected(new Date(`${input.date.slice(0, 7)}-01T12:00:00`));
+    setSelected(monthKey(input.date));
     setNotice("Transação salva. Sua visão geral está atualizada.");
   }
   const demoCount =
@@ -193,15 +194,7 @@ export default function App() {
                   className="icon-button"
                   aria-label="Mês anterior"
                   disabled={monthKey(selected) <= "1900-01"}
-                  onClick={() =>
-                    setSelected(
-                      new Date(
-                        selected.getFullYear(),
-                        selected.getMonth() - 1,
-                        1,
-                      ),
-                    )
-                  }
+                  onClick={() => setSelected(shiftMonth(selected, -1))}
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -210,16 +203,8 @@ export default function App() {
                 <button
                   className="icon-button"
                   aria-label="Próximo mês"
-                  disabled={monthKey(selected) >= monthKey(new Date())}
-                  onClick={() =>
-                    setSelected(
-                      new Date(
-                        selected.getFullYear(),
-                        selected.getMonth() + 1,
-                        1,
-                      ),
-                    )
-                  }
+                  disabled={monthKey(selected) >= dateMonth(today)}
+                  onClick={() => setSelected(shiftMonth(selected, 1))}
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -273,6 +258,7 @@ export default function App() {
                 transactions={snapshot.transactions}
                 settings={snapshot.settings}
                 selected={selected}
+                today={today}
                 onAdd={() => openEditor()}
                 onImport={openImport}
               />
@@ -296,6 +282,7 @@ export default function App() {
         {settingsSession && page === "settings" && (
           <SettingsPage
             key={settingsSession.id}
+            today={today}
             settings={(snapshot ?? settingsSession.snapshot).settings}
             transactions={(snapshot ?? settingsSession.snapshot).transactions}
             revision={finance.revision ?? settingsSession.revision}
@@ -381,6 +368,7 @@ export default function App() {
       {editor && (
         <AddTransactionModal
           settings={editor.settings}
+          today={today}
           invalidated={!snapshot || editor.version !== finance.restoreVersion}
           transaction={editor.transaction}
           onSave={save}
@@ -403,6 +391,7 @@ export default function App() {
       )}
       {importing !== null && (
         <ImportModal
+          today={today}
           settings={(snapshot ?? importing.snapshot).settings}
           transactions={(snapshot ?? importing.snapshot).transactions}
           invalidated={

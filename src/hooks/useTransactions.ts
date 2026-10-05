@@ -5,6 +5,7 @@ import type {
   NewTransaction,
   Transaction,
 } from "../types/finance";
+import { captureCivilCut } from "../utils/civil";
 import { validateTransaction } from "../features/transactions/validation";
 import {
   transactionRepository,
@@ -90,16 +91,11 @@ export function useTransactions(
     expectedRevision: number,
     existing?: Transaction,
   ) {
-    const valid = validateTransaction(
+    const transaction = prepareTransaction(
       input,
       requireSnapshot().snapshot.settings,
+      existing,
     );
-    const transaction: Transaction = {
-      ...valid,
-      id: existing?.id ?? crypto.randomUUID(),
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
-      source: existing?.source ?? "manual",
-    };
     await command(() =>
       repository.save(transaction, {
         kind: existing ? "update" : "create",
@@ -119,10 +115,13 @@ export function useTransactions(
     expectedRevision: number,
   ) {
     const current = requireSnapshot();
+    const cut = captureCivilCut();
     const items: Transaction[] = inputs.map((input) => ({
-      ...validateTransaction(input, current.snapshot.settings),
+      ...validateTransaction(input, current.snapshot.settings, {
+        today: cut.today,
+      }),
       id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+      createdAt: cut.instant,
       source: "import",
     }));
     const { count } = await command(() =>
@@ -180,5 +179,33 @@ export function useTransactions(
     importTransactions,
     saveSettings,
     removeDemo,
+  };
+}
+
+// A edição preserva alegações históricas e ausências; nunca as reconstrói.
+export function prepareTransaction(
+  input: NewTransaction,
+  settings: FinanceSettings,
+  existing?: Transaction,
+  cut = captureCivilCut(),
+): Transaction {
+  const valid = validateTransaction(input, settings, { today: cut.today });
+  if (existing) {
+    const next = {
+      ...existing,
+      ...valid,
+      id: existing.id,
+      source: existing.source,
+      createdAt: existing.createdAt,
+    };
+    if (existing.source === undefined) delete next.source;
+    if (existing.createdAt === undefined) delete next.createdAt;
+    return next as Transaction;
+  }
+  return {
+    ...valid,
+    id: crypto.randomUUID(),
+    source: "manual",
+    createdAt: cut.instant,
   };
 }

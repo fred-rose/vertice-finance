@@ -1,3 +1,4 @@
+import type { CivilDate } from "../../utils/civil";
 import { useLayoutEffect, useState } from "react";
 import { Dialog } from "../ui/Dialog";
 import { TransactionForm } from "./TransactionForm";
@@ -11,12 +12,14 @@ export function AddTransactionModal({
   onClose,
   onSave,
   settings,
+  today,
   transaction,
   invalidated = false,
 }: {
   onClose: () => void;
   onSave: (input: NewTransaction) => Promise<void>;
   settings: FinanceSettings;
+  today: CivilDate;
   transaction?: Transaction;
   invalidated?: boolean;
 }) {
@@ -34,6 +37,7 @@ export function AddTransactionModal({
   return (
     <TransactionForm
       settings={settings}
+      today={today}
       transaction={transaction}
       busy={busy}
       setBusy={setBusy}

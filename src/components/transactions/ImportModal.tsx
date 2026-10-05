@@ -1,3 +1,4 @@
+import type { CivilDate } from "../../utils/civil";
 import { LocalConflictError } from "../../services/transactionRepository";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useInvalidated, useUnsavedWork } from "../../hooks/useUnsavedWork";
@@ -18,12 +19,14 @@ import {
 import { money } from "../../utils/format";
 export function ImportModal({
   settings,
+  today,
   transactions,
   onImport,
   onClose,
   invalidated = false,
 }: {
   settings: FinanceSettings;
+  today: CivilDate;
   transactions: Transaction[];
   onImport: (items: NewTransaction[], skip: boolean) => Promise<number>;
   onClose: () => void;
@@ -79,6 +82,8 @@ export function ImportModal({
             mapping,
             settings,
             {
+              today,
+              date1904: sheets[sheet]?.date1904,
               decimal,
               dateFormat,
               defaultType,
@@ -89,6 +94,9 @@ export function ImportModal({
             transactions,
           ),
     [
+      today,
+      sheets,
+      sheet,
       rows,
       mapping,
       settings,

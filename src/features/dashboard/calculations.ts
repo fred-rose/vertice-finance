@@ -1,3 +1,15 @@
+import {
+  asCivilDate,
+  asCivilMonth,
+  captureCivilCut,
+  dateMonth,
+  daysInMonth,
+  monthParts,
+  shiftMonth,
+  civilMonthLabel,
+  type CivilDate,
+  type CivilMonth,
+} from "../../utils/civil";
 import type {
   Account,
   Category,
@@ -8,7 +20,7 @@ import type {
   Transaction,
 } from "../../types/finance";
 import { categories as defaultCategories } from "../../data/catalog";
-import { localDate, moneyMinor, monthKey } from "../../utils/format";
+import { moneyMinor, monthKey } from "../../utils/format";
 import {
   checkedAdd,
   checkedSubtract,
@@ -72,7 +84,7 @@ export const netBalance = (items: Transaction[]) =>
   toLegacyReais(summaryMinor(items).balance);
 export const percentageChange = (current: number, previous: number) =>
   changeMinor(fromLegacyReais(current), fromLegacyReais(previous));
-export const forMonth = (items: Transaction[], date: Date) =>
+export const forMonth = (items: Transaction[], date: Date | CivilMonth) =>
   items.filter((t) => t.date.startsWith(monthKey(date)));
 export function summarize(items: Transaction[]): FinancialSummary {
   return summaryReais(summaryMinor(items));
@@ -98,26 +110,26 @@ export function compareSummaries(
 
 export function comparablePeriods(
   items: Transaction[],
-  selected: Date,
-  now = new Date(),
+  selected: Date | CivilMonth,
+  now: Date | CivilDate = captureCivilCut().today,
 ) {
-  const partial = monthKey(selected) === monthKey(now);
-  const before = new Date(selected.getFullYear(), selected.getMonth() - 1, 1);
+  const period = asCivilMonth(selected),
+    today = asCivilDate(now);
+  const day = Number(today.slice(8));
+  const partial = period === dateMonth(today);
+  const before = shiftMonth(period, -1);
   const cutoff = partial
-    ? Math.min(
-        now.getDate(),
-        new Date(before.getFullYear(), before.getMonth() + 1, 0).getDate(),
-      )
+    ? Math.min(day, daysInMonth(...monthParts(before)))
     : 31;
   return {
-    current: forMonth(items, selected).filter(
-      (t) => !partial || Number(t.date.slice(8)) <= now.getDate(),
+    current: forMonth(items, period).filter(
+      (t) => !partial || Number(t.date.slice(8)) <= day,
     ),
     previous: forMonth(items, before).filter(
       (t) => Number(t.date.slice(8)) <= cutoff,
     ),
     label: partial
-      ? `Comparação até o dia ${now.getDate()} (mês anterior até o dia ${cutoff}). Registros ausentes não comprovam ausência de gastos.`
+      ? `Comparação até o dia ${day} (mês anterior até o dia ${cutoff}). Registros ausentes não comprovam ausência de gastos.`
       : "Comparação entre meses registrados. Registros ausentes não comprovam ausência de gastos.",
     partial,
   };
@@ -190,13 +202,9 @@ export function aggregateCategories(
     attention: c.attention,
   }));
 }
-function monthlySummaries(items: Transaction[], selected: Date) {
+function monthlySummaries(items: Transaction[], selected: CivilMonth) {
   return Array.from({ length: 6 }, (_, index) => {
-    const date = new Date(
-      selected.getFullYear(),
-      selected.getMonth() - 5 + index,
-      1,
-    );
+    const date = shiftMonth(asCivilMonth(selected), -5 + index);
     const records = forMonth(items, date).filter((t) => t.type !== "transfer");
     return {
       date,
@@ -205,12 +213,10 @@ function monthlySummaries(items: Transaction[], selected: Date) {
     };
   });
 }
-export function monthlyData(items: Transaction[], selected: Date) {
-  return monthlySummaries(items, selected).map(
+export function monthlyData(items: Transaction[], selected: Date | CivilMonth) {
+  return monthlySummaries(items, asCivilMonth(selected)).map(
     ({ date, hasData, summary }) => ({
-      month: new Intl.DateTimeFormat("pt-BR", { month: "short" })
-        .format(date)
-        .replace(".", ""),
+      month: civilMonthLabel(date, true),
       key: monthKey(date),
       ...summaryReais(summary),
       balance: hasData ? toLegacyReais(summary.balance) : null,
@@ -220,8 +226,13 @@ export function monthlyData(items: Transaction[], selected: Date) {
   );
 }
 // O saldo médio do gráfico também é cálculo monetário, não uma coordenada.
-export function monthlyBalanceAverage(items: Transaction[], selected: Date) {
-  const recorded = monthlySummaries(items, selected).filter((m) => m.hasData);
+export function monthlyBalanceAverage(
+  items: Transaction[],
+  selected: Date | CivilMonth,
+) {
+  const recorded = monthlySummaries(items, asCivilMonth(selected)).filter(
+    (m) => m.hasData,
+  );
   return recorded.length
     ? toLegacyReais(
         multiplyDivideRounded(
@@ -234,14 +245,11 @@ export function monthlyBalanceAverage(items: Transaction[], selected: Date) {
 }
 function movingAverageMinor(
   items: Transaction[],
-  selected: Date,
+  selected: CivilMonth,
   months: number,
 ) {
   const values = Array.from({ length: months }, (_, i) =>
-    forMonth(
-      items,
-      new Date(selected.getFullYear(), selected.getMonth() - i - 1, 1),
-    ),
+    forMonth(items, shiftMonth(asCivilMonth(selected), -i - 1)),
   ).filter((rows) => rows.some((t) => t.type !== "transfer"));
   return {
     months: values.length,
@@ -260,37 +268,47 @@ function movingAverageMinor(
 }
 export function movingAverage(
   items: Transaction[],
-  selected: Date,
+  selected: Date | CivilMonth,
   months = 3,
 ) {
-  const result = movingAverageMinor(items, selected, months);
+  const result = movingAverageMinor(items, asCivilMonth(selected), months);
   return {
     ...result,
     expenses: result.expenses === null ? null : toLegacyReais(result.expenses),
   };
 }
-function projectionMinor(items: Transaction[], selected: Date, now: Date) {
+function projectionMinor(
+  items: Transaction[],
+  selected: CivilMonth,
+  now: CivilDate,
+) {
+  const today = asCivilDate(now),
+    day = Number(today.slice(8));
   const current = forMonth(items, selected).filter(
-    (t) => t.date <= localDate(now) && t.type === "expense",
+    (t) => t.date <= today && t.type === "expense",
   );
   if (
     monthKey(selected) !== monthKey(now) ||
-    now.getDate() < 7 ||
+    day < 7 ||
     new Set(current.map((t) => t.date)).size < 3
   )
     return null;
   return multiplyDivideRounded(
     totalMinor(current, "expense"),
-    new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(),
-    now.getDate(),
+    daysInMonth(...monthParts(dateMonth(today))),
+    day,
   );
 }
 export function closingProjection(
   items: Transaction[],
-  selected: Date,
-  now = new Date(),
+  selected: Date | CivilMonth,
+  now: Date | CivilDate = captureCivilCut().today,
 ) {
-  const result = projectionMinor(items, selected, now);
+  const result = projectionMinor(
+    items,
+    asCivilMonth(selected),
+    asCivilDate(now),
+  );
   return result === null ? null : toLegacyReais(result);
 }
 function accountMinor(account: Account, items: Transaction[], asOf: string) {
@@ -322,7 +340,7 @@ function accountMinor(account: Account, items: Transaction[], asOf: string) {
 export function accountBalance(
   account: Account,
   items: Transaction[],
-  asOf = localDate(),
+  asOf: string = captureCivilCut().today,
 ) {
   const result = accountMinor(account, items, asOf);
   return result === null ? null : toLegacyReais(result);
@@ -339,7 +357,7 @@ function accountsMinor(
 export function totalAccountBalance(
   accounts: Account[],
   items: Transaction[],
-  asOf = localDate(),
+  asOf: string = captureCivilCut().today,
 ): number | null {
   const result = accountsMinor(accounts, items, asOf);
   return result === null ? null : toLegacyReais(result);
@@ -389,9 +407,9 @@ export function detectAnomalies(
 }
 export function generateInsights(
   items: Transaction[],
-  selected: Date,
+  selected: Date | CivilMonth,
   settings?: FinanceSettings,
-  now = new Date(),
+  now: Date | CivilDate = captureCivilCut().today,
 ): Insight[] {
   const { current, previous, partial } = comparablePeriods(
     items,
@@ -401,7 +419,7 @@ export function generateInsights(
   if (!current.some((t) => t.type !== "transfer")) return [];
   const summary = summaryMinor(current),
     prior = summaryMinor(previous);
-  const history = movingAverageMinor(items, selected, 3);
+  const history = movingAverageMinor(items, asCivilMonth(selected), 3);
   const catalog = settings?.categories ?? defaultCategories;
   const insights: Insight[] = [];
   if (summary.balance < 0)
@@ -418,7 +436,7 @@ export function generateInsights(
     settings.lowBalanceThreshold > 0
   ) {
     const threshold = fromLegacyReais(settings.lowBalanceThreshold, "settings");
-    const balance = accountsMinor(settings.accounts, items, localDate(now));
+    const balance = accountsMinor(settings.accounts, items, asCivilDate(now));
     if (balance !== null && balance < threshold)
       insights.push({
         id: "low-balance",
@@ -474,7 +492,11 @@ export function generateInsights(
       tone: delta > 0 ? "warning" : "positive",
       priority: delta > 0 ? 60 : 20,
     });
-  const projection = projectionMinor(items, selected, now);
+  const projection = projectionMinor(
+    items,
+    asCivilMonth(selected),
+    asCivilDate(now),
+  );
   if (
     projection !== null &&
     history.months >= 2 &&

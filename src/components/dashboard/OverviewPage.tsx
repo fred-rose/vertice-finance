@@ -1,3 +1,4 @@
+import type { CivilDate, CivilMonth } from "../../utils/civil";
 import { useMemo } from "react";
 import { Plus, Upload, Wallet } from "lucide-react";
 import type {
@@ -30,17 +31,19 @@ export function OverviewPage({
   transactions,
   settings,
   selected,
+  today,
   onAdd,
   onImport,
 }: {
   transactions: Transaction[];
   settings: FinanceSettings;
-  selected: Date;
+  selected: CivilMonth;
+  today: CivilDate;
   onAdd: () => void;
   onImport: () => void;
 }) {
   const dashboard = useMemo(() => {
-    const periods = comparablePeriods(transactions, selected);
+    const periods = comparablePeriods(transactions, selected, today);
     try {
       const comparison = compareSummaries(periods.current, periods.previous);
       return {
@@ -55,18 +58,18 @@ export function OverviewPage({
         ),
         trend: monthlyData(transactions, selected),
         trendAverage: monthlyBalanceAverage(transactions, selected),
-        insights: generateInsights(transactions, selected, settings),
-        projection: closingProjection(transactions, selected),
+        insights: generateInsights(transactions, selected, settings, today),
+        projection: closingProjection(transactions, selected, today),
       };
     } catch (error) {
       if (!(error instanceof MoneyError)) throw error;
       return undefined;
     }
-  }, [transactions, selected, settings]);
-  // Mantém a avaliação por render e o default temporal já existente.
+  }, [transactions, selected, settings, today]);
+  // A mesma captura do App também rege os saldos e o fallback.
   function balanceLabel(account: Account) {
     try {
-      const balance = accountBalance(account, transactions);
+      const balance = accountBalance(account, transactions, today);
       return balance === null ? accountBalanceLabel(null) : money(balance);
     } catch (error) {
       if (!(error instanceof MoneyError)) throw error;
@@ -127,7 +130,9 @@ export function OverviewPage({
           <Plus size={18} /> Adicionar transação
         </button>
         <RecentTransactions
-          transactions={comparablePeriods(transactions, selected).current}
+          transactions={
+            comparablePeriods(transactions, selected, today).current
+          }
           settings={settings}
         />
       </>

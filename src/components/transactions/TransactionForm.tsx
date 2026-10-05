@@ -1,3 +1,4 @@
+import { captureCivilCut, type CivilDate } from "../../utils/civil";
 import { LocalConflictError } from "../../services/transactionRepository";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { type WorkOwner, useInvalidated } from "../../hooks/useUnsavedWork";
@@ -10,13 +11,13 @@ import type {
   Transaction,
   TransactionType,
 } from "../../types/finance";
-import { localDate } from "../../utils/format";
 import {
   parseAmount,
   validateTransaction,
 } from "../../features/transactions/validation";
 export function TransactionForm({
   settings,
+  today,
   transaction,
   busy,
   setBusy,
@@ -27,6 +28,7 @@ export function TransactionForm({
   wrap = (content) => content,
 }: {
   settings: FinanceSettings;
+  today: CivilDate;
   transaction?: Transaction;
   busy: boolean;
   setBusy: (busy: boolean) => void;
@@ -41,7 +43,7 @@ export function TransactionForm({
   const base = useRef<string | null>(null);
   const draft = useRef<Record<string, string>>({});
   const [initialSettings] = useState(settings);
-  const [initialDate] = useState(() => transaction?.date ?? localDate());
+  const [initialDate] = useState(() => transaction?.date ?? today);
   const [type, setType] = useState<TransactionType>(
     transaction?.type ?? "expense",
   );
@@ -86,7 +88,9 @@ export function TransactionForm({
         : { ...base, type };
     setError("");
     try {
-      const valid = validateTransaction(input, settings);
+      const valid = validateTransaction(input, settings, {
+        today: captureCivilCut().today,
+      });
       setBusy(true);
       await onSave(valid);
       if (invalid.current) return;
@@ -215,7 +219,7 @@ export function TransactionForm({
               name="date"
               required
               min="1900-01-01"
-              max={localDate()}
+              max={today}
               defaultValue={initialDate}
             />
           </label>

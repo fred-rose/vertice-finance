@@ -1,3 +1,4 @@
+import { captureCivilCut, type CivilDate } from "../../utils/civil";
 import {
   LocalConflictError,
   type WriteReceipt,
@@ -27,13 +28,13 @@ import {
 import {
   calculationUnavailable,
   accountBalanceLabel,
-  localDate,
   moneyMinor,
   moneyFromCalculation,
 } from "../../utils/format";
 
 export function SettingsPage({
   settings,
+  today,
   revision,
   transactions,
   onSave,
@@ -42,6 +43,7 @@ export function SettingsPage({
   onDiscard,
 }: {
   settings: FinanceSettings;
+  today: CivilDate;
   revision: number;
   transactions: Transaction[];
   onSave: (
@@ -99,7 +101,7 @@ export function SettingsPage({
   }
   function balanceLabel(account: Account) {
     try {
-      const balance = accountBalance(account, transactions);
+      const balance = accountBalance(account, transactions, today);
       return balance === null
         ? accountBalanceLabel(null)
         : moneyFromCalculation(balance);
@@ -125,7 +127,9 @@ export function SettingsPage({
     setSaved(false);
     setBusy(true);
     try {
-      const applied = structuredClone(validateSettings(draft));
+      const applied = structuredClone(
+        validateSettings(draft, false, captureCivilCut().today),
+      );
       const receipt = await onSave(applied, baseRevision);
       if (invalid.current) return;
       base.current = editableKey(applied);
@@ -260,7 +264,7 @@ export function SettingsPage({
                     type="date"
                     required
                     min="1900-01-01"
-                    max={localDate()}
+                    max={today}
                     value={a.initialBalanceDate}
                     onChange={(e) =>
                       change({
@@ -294,7 +298,7 @@ export function SettingsPage({
                     name: "",
                     type: "checking",
                     initialBalance: 0,
-                    initialBalanceDate: localDate(),
+                    initialBalanceDate: today,
                   },
                 ],
               })
@@ -644,7 +648,7 @@ export function SettingsPage({
                     name: "",
                     targetAmount: 0,
                     currentAmount: 0,
-                    deadline: localDate(),
+                    deadline: today,
                   },
                 ],
               })

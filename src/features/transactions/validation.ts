@@ -1,5 +1,10 @@
 import type { FinanceSettings, NewTransaction } from "../../types/finance";
-import { localDate } from "../../utils/format";
+import {
+  civilDate,
+  isCivilDate,
+  captureCivilCut,
+  type CivilDate,
+} from "../../utils/civil";
 import {
   fromLegacyReais,
   hasLegacyPrecision,
@@ -19,19 +24,15 @@ export function parseAmount(text: string, decimal: "," | "." = ","): number {
   }
 }
 export function validDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T12:00:00Z`);
-  return (
-    Number.isFinite(date.getTime()) &&
-    date.toISOString().slice(0, 10) === value &&
-    value >= "1900-01-01"
-  );
+  return isCivilDate(value);
 }
+
 export function validateTransaction(
   input: NewTransaction,
   settings: FinanceSettings,
   options: {
     structural?: boolean;
+    today?: CivilDate;
     accountIds?: ReadonlySet<string>;
     categoryTypes?: ReadonlyMap<string, string>;
   } = {},
@@ -51,7 +52,8 @@ export function validateTransaction(
     throw new Error("A descrição deve ter entre 1 e 100 caracteres.");
   if (
     !validDate(input.date) ||
-    (!options.structural && input.date > localDate())
+    (!options.structural &&
+      input.date > civilDate(options.today ?? captureCivilCut().today))
   )
     throw new Error("Informe uma data válida, até hoje.");
   const hasAccount = (id: string | undefined) =>
@@ -94,7 +96,11 @@ export function validateTransaction(
 export function validateSettings(
   settings: FinanceSettings,
   structural = false,
+  today?: CivilDate,
 ): FinanceSettings {
+  const cutoff = structural
+    ? undefined
+    : civilDate(today ?? captureCivilCut().today);
   const monetary = (n: number, negative = false) =>
     Number.isFinite(n) &&
     (negative || n >= 0) &&
@@ -118,7 +124,7 @@ export function validateSettings(
       !["checking", "savings", "cash"].includes(a.type) ||
       !monetary(a.initialBalance, true) ||
       !validDate(a.initialBalanceDate) ||
-      (!structural && a.initialBalanceDate > localDate())
+      (!structural && a.initialBalanceDate > cutoff!)
     )
       throw new Error("Revise nome, saldo e data inicial das contas.");
   for (const c of settings.categories)

@@ -1,3 +1,9 @@
+import {
+  addCivilDays,
+  civilDate,
+  captureCivilCut,
+  type CivilDate,
+} from "../../utils/civil";
 import type {
   FinanceSettings,
   NewTransaction,
@@ -13,6 +19,7 @@ export type Cell = string | number;
 export interface ImportSheet {
   name: string;
   rows: Cell[][];
+  date1904?: boolean;
 }
 export type Mapping = Record<
   | "date"
@@ -111,7 +118,11 @@ export async function readSpreadsheet(
         }
         rows.push(cells);
       });
-      return { name: sheet.name, rows };
+      return {
+        name: sheet.name,
+        rows,
+        date1904: workbook.properties.date1904 === true,
+      };
     })
     .filter((sheet) => sheet.rows.length);
 }
@@ -133,12 +144,30 @@ export function suggestMapping(headers: Cell[]): Mapping {
     recurring: find("recorrente", "recurring"),
   };
 }
-export function importDate(cell: Cell, format: "dmy" | "mdy"): string {
+export function importDate(
+  cell: Cell,
+  format: "dmy" | "mdy",
+  date1904 = false,
+): string {
   if (typeof cell === "number") {
-    const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(cell) * 86400000);
-    return Number.isFinite(date.getTime())
-      ? date.toISOString().slice(0, 10)
-      : "";
+    // Serial Excel é calendário, não duração/Instant. 60 em 1900 é fictício.
+    if (
+      !Number.isFinite(cell) ||
+      cell < (date1904 ? 0 : 1) ||
+      cell > 2958465 ||
+      (!date1904 && Math.floor(cell) === 60)
+    )
+      return "";
+    const serial = Math.floor(cell);
+    try {
+      return addCivilDays(
+        civilDate(date1904 ? "1904-01-01" : "1900-01-01"),
+        serial - (date1904 ? 0 : 1) - (!date1904 && serial > 60 ? 1 : 0),
+      );
+    } catch (error) {
+      if (error instanceof RangeError) return "";
+      throw error;
+    }
   }
   const value = cell.trim();
   if (validDate(value)) return value;
@@ -151,6 +180,8 @@ export function previewImport(
   mapping: Mapping,
   settings: FinanceSettings,
   options: {
+    today?: CivilDate;
+    date1904?: boolean;
     decimal: "," | ".";
     dateFormat: "dmy" | "mdy";
     accountId: string;
@@ -166,6 +197,7 @@ export function previewImport(
     error?: string;
     duplicate?: boolean;
   }[] = [];
+  const today = options.today ?? captureCivilCut().today;
   const known = new Set(existing.map(transactionSignature));
   rows.slice(1).forEach((row, i) => {
     // Keep physical row numbers in diagnostics, but do not import blank rows.
@@ -234,7 +266,7 @@ export function previewImport(
         categoryId,
         accountId,
         description: unescapeText(String(get("description"))),
-        date: importDate(get("date"), options.dateFormat),
+        date: importDate(get("date"), options.dateFormat, options.date1904),
         recurring: ["sim", "true", "1"].includes(recurringText),
       };
       const input: NewTransaction =
@@ -246,7 +278,7 @@ export function previewImport(
                 findAccount(get("destinationAccountId")) ?? "",
             }
           : { ...base, type };
-      const transaction = validateTransaction(input, settings);
+      const transaction = validateTransaction(input, settings, { today });
       const signature = transactionSignature(transaction),
         duplicate = known.has(signature);
       known.add(signature);
