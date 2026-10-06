@@ -41,6 +41,8 @@ const ALL = [...SCOPED, S.legacyTransactions, S.legacySettings];
 export interface ScopedRead {
   workspaceId: WorkspaceId;
   revision: number;
+  // Operational restore receipt, outside the financial DTO and backup v2.
+  restoreRevision?: number;
   snapshot: FinanceSnapshot;
 }
 export interface MigrationPreflight {
@@ -113,13 +115,14 @@ export function scopedRequests(tx: IDBTransaction, id: WorkspaceId) {
   const metadata = tx.objectStore(S.metadata);
   const authority = metadata.get("authority"),
     meta = metadata.get(workspaceMetadataKey(id));
+  const restore = metadata.get(["restore", id]);
   const rows = tx
     .objectStore(S.transactions)
     .index(WORKSPACE_INDEX)
     .getAll(IDBKeyRange.only(id));
   const settings = tx.objectStore(S.settings).get(id);
   return {
-    requests: [authority, meta, rows, settings] as IDBRequest[],
+    requests: [authority, meta, rows, settings, restore] as IDBRequest[],
     result(): ScopedRead {
       try {
         workspaceAuthority(authority.result);
@@ -147,6 +150,20 @@ export function scopedRequests(tx: IDBTransaction, id: WorkspaceId) {
         return {
           workspaceId: id,
           revision: info.revision,
+          ...(restore.result === undefined
+            ? {}
+            : {
+                restoreRevision: (() => {
+                  const value = restore.result;
+                  if (
+                    !Number.isSafeInteger(value) ||
+                    value < 1 ||
+                    value > info.revision
+                  )
+                    throw new ScopedStorageError("invalid-snapshot");
+                  return value as number;
+                })(),
+              }),
           snapshot: rawSnapshot({ transactions, settings: config }),
         };
       } catch (cause) {
@@ -160,6 +177,7 @@ export function scopedRequests(tx: IDBTransaction, id: WorkspaceId) {
 export function createScopedStorage() {
   let connection: IDBDatabase | undefined;
   let current: OpenAttempt | undefined;
+  const invalidationListeners = new Set<() => void>();
   const safeties = new WeakMap<MigrationPreflight, LegacyRaw | null>();
   function cancel() {
     current?.cancel();
@@ -254,7 +272,10 @@ export function createScopedStorage() {
         }
         db.onversionchange = () => {
           db.close();
-          if (connection === db) connection = undefined;
+          if (connection === db) {
+            connection = undefined;
+            invalidationListeners.forEach((fn) => fn());
+          }
         };
         settled = true;
         resolve(db);
@@ -604,6 +625,13 @@ export function createScopedStorage() {
     }
   }
   return Object.freeze({
+    inspectVersion: probe,
+    subscribeInvalidation(fn: () => void) {
+      invalidationListeners.add(fn);
+      return () => {
+        invalidationListeners.delete(fn);
+      };
+    },
     preflight,
     open,
     read,

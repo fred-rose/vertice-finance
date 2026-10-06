@@ -1,6 +1,11 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
 import { backupFixture } from "./helpers/backupFixture";
-import { rawLocal, repositoryBundle, seedLocal } from "./helpers/localData";
+import {
+  rawLocal,
+  uiRepositoryBundle as repositoryBundle,
+  seedLocal,
+} from "./helpers/localData";
 
 let bundle: string;
 test.beforeAll(async () => {
@@ -350,8 +355,26 @@ test("safety anterior é descartada após restore externo e exige novo download"
   const before = await rawLocal(other);
   await restore.evaluate((el) => (el as HTMLButtonElement).click());
   expect(await rawLocal(other)).toEqual(before);
+  await expect(
+    page.getByRole("button", {
+      name: "Baixar backup de segurança",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
   await page
-    .getByRole("button", { name: "Baixar backup de segurança" })
+    .getByRole("button", { name: "Descartar e fechar", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Restaurar backup JSON", exact: true })
+    .click();
+  await page.getByLabel("Arquivo de backup JSON v2").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(backupFixture())),
+  });
+  await page
+    .getByRole("button", { name: "Baixar backup de segurança", exact: true })
     .click();
   await expect(restore).toBeEnabled();
 });

@@ -21,13 +21,19 @@ export function RestoreBackupDialog({
   onRestore,
   onClose,
   invalidationKey = 0,
+  invalidated = false,
+  previewOnly = false,
 }: {
   readForBackup: () => Promise<LocalRead>;
   onRestore: (snapshot: FinanceSnapshot, previous: LocalRead) => Promise<void>;
   onClose: () => void;
   invalidationKey?: number;
+  invalidated?: boolean;
+  previewOnly?: boolean;
 }) {
   const work = useUnsavedWork();
+  const invalid = useRef(false);
+  if (invalidated) invalid.current = true;
   const generation = useRef(0);
   const lastKey = useRef(invalidationKey);
   if (lastKey.current !== invalidationKey) {
@@ -53,7 +59,7 @@ export function RestoreBackupDialog({
     [backup],
   );
   async function select(file?: File) {
-    if (active.current) return;
+    if (active.current || invalid.current) return;
     active.current = true;
     setBackup(null);
     work.set({ hasUnsavedWork: false });
@@ -65,7 +71,8 @@ export function RestoreBackupDialog({
       if (file) {
         const content = await file.text();
         await new Promise((resolve) => setTimeout(resolve, 0));
-        setBackup(parseBackup(content));
+        const parsed = parseBackup(content);
+        setBackup(parsed);
         work.set({ hasUnsavedWork: true });
       }
     } catch (cause) {
@@ -80,7 +87,7 @@ export function RestoreBackupDialog({
     }
   }
   async function safetyDownload() {
-    if (!backup || active.current) return;
+    if (previewOnly || !backup || active.current || invalid.current) return;
     active.current = true;
     const started = generation.current;
     setSafety(null);
@@ -89,7 +96,7 @@ export function RestoreBackupDialog({
     setBusy("Preparando o backup de segurança…");
     try {
       const current = await readForBackup();
-      if (generation.current !== started) return;
+      if (generation.current !== started || invalid.current) return;
       const content = serializeBackup(current.snapshot);
       download(
         content,
@@ -108,7 +115,8 @@ export function RestoreBackupDialog({
     }
   }
   async function restore() {
-    if (!backup || !safety || active.current) return;
+    if (previewOnly || !backup || !safety || active.current || invalid.current)
+      return;
     active.current = true;
     const started = generation.current;
     setError("");
@@ -135,16 +143,33 @@ export function RestoreBackupDialog({
   }
   return (
     <Dialog
-      title="Restaurar backup JSON"
+      title={
+        previewOnly
+          ? "Conferir backup JSON (sem destino validado)"
+          : "Restaurar backup JSON"
+      }
       onClose={onClose}
       busy={!!busy}
       work={work}
     >
+      {previewOnly && (
+        <p>
+          Prévia somente. Não é possível restaurar nesta base inválida. Use um
+          perfil limpo com Personal validado.
+        </p>
+      )}
       <p className="dialog-description">
-        O backup substituirá todas as transações e configurações salvas neste
-        navegador. Feche outras abas do Vértice antes de continuar. Edições
-        ainda não salvas não fazem parte do backup.
+        O backup substituirá as transações e configurações do Personal
+        capturado. O JSON v2 não identifica o espaço de origem. Feche outras
+        abas do Vértice antes de continuar. Edições ainda não salvas não fazem
+        parte do backup.
       </p>
+      {invalid.current && (
+        <p role="status">
+          Esta sessão de restauração foi invalidada. Reabra para capturar o
+          destino e preparar uma nova cópia de segurança.
+        </p>
+      )}
       {!verificationFailed && (
         <label>
           Arquivo de backup JSON v2
@@ -153,7 +178,7 @@ export function RestoreBackupDialog({
             type="file"
             accept=".json,application/json"
             style={{ maxWidth: "100%" }}
-            disabled={!!busy}
+            disabled={!!busy || invalid.current}
             onChange={(e) => void select(e.target.files?.[0])}
           />
         </label>
@@ -186,7 +211,7 @@ export function RestoreBackupDialog({
           baixado e guarde-o até verificar que a restauração ficou correta.
         </p>
       )}
-      {safetyFailed && <RecoveryGuidance />}
+      {(safetyFailed || previewOnly) && <RecoveryGuidance />}
       <div className="dialog-actions row-actions">
         <DialogClose disabled={!!busy}>
           {verificationFailed ? "Fechar" : "Cancelar"}
@@ -196,7 +221,7 @@ export function RestoreBackupDialog({
             <button
               type="button"
               className="secondary-button"
-              disabled={!backup || !!busy}
+              disabled={previewOnly || !backup || !!busy || invalid.current}
               onClick={() => void safetyDownload()}
             >
               Baixar backup de segurança
@@ -204,7 +229,7 @@ export function RestoreBackupDialog({
             <button
               type="button"
               className="danger-button"
-              disabled={!safety || !!busy}
+              disabled={previewOnly || !safety || !!busy || invalid.current}
               onClick={() => void restore()}
             >
               Restaurar este backup

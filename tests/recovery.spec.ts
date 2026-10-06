@@ -1,4 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
+import { migrateApp } from "./helpers/b2cData";
 import { backupFixture } from "./helpers/backupFixture";
 import { rawLocal, seedLocal } from "./helpers/localData";
 
@@ -106,12 +108,15 @@ test("recovery abre preview; safety bloqueia; cancelar preserva toda a origem", 
   await expect(
     dialog.getByRole("region", { name: "Prévia do backup" }),
   ).toContainText("3 transações");
-  await dialog
-    .getByRole("button", { name: "Baixar backup de segurança" })
-    .click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "A restauração está bloqueada",
+  const safety = dialog.getByRole("button", {
+    name: "Baixar backup de segurança",
+  });
+  await expect(safety).toBeDisabled();
+  await safety.evaluate((el) => (el as HTMLButtonElement).click());
+  await expect(dialog).toContainText(
+    "Prévia somente. Não é possível restaurar nesta base inválida.",
   );
+
   await expect(
     dialog.getByRole("button", { name: "Restaurar este backup", exact: true }),
   ).toBeDisabled();
@@ -147,6 +152,7 @@ test("retry após estado legível retorna ao app e permite o fluxo A1 completo",
   // External correction is fixture setup; the recovery UI never repairs data.
   await seedLocal(page, { ...fixture, present: true });
   await page.getByRole("button", { name: "Tentar novamente" }).click();
+  await migrateApp(page);
   await expect(page.locator(".summary")).toBeVisible();
   await expect(
     page.getByText("Salvo neste navegador", { exact: false }),

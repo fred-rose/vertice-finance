@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
 import { build } from "vite";
 import { fileURLToPath } from "node:url";
 import ExcelJS from "exceljs";

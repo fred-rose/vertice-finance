@@ -34,6 +34,7 @@ export function OverviewPage({
   today,
   onAdd,
   onImport,
+  readonly = false,
 }: {
   transactions: Transaction[];
   settings: FinanceSettings;
@@ -41,6 +42,7 @@ export function OverviewPage({
   today: CivilDate;
   onAdd: () => void;
   onImport: () => void;
+  readonly?: boolean;
 }) {
   const dashboard = useMemo(() => {
     const periods = comparablePeriods(transactions, selected, today);
@@ -91,11 +93,19 @@ export function OverviewPage({
           visão mais clara do seu dinheiro.
         </p>
         <div className="welcome-actions">
-          <button className="primary-button" onClick={onAdd}>
+          <button
+            className="primary-button"
+            disabled={readonly}
+            onClick={onAdd}
+          >
             <Plus size={18} />
             Adicionar primeira transação
           </button>
-          <button className="secondary-button" onClick={onImport}>
+          <button
+            className="secondary-button"
+            disabled={readonly}
+            onClick={onImport}
+          >
             <Upload size={17} />
             Importar planilha
           </button>
@@ -126,7 +136,11 @@ export function OverviewPage({
         <p className="form-error" role="status">
           {calculationUnavailable}
         </p>
-        <button className="primary-button mobile-add" onClick={onAdd}>
+        <button
+          className="primary-button mobile-add"
+          disabled={readonly}
+          onClick={onAdd}
+        >
           <Plus size={18} /> Adicionar transação
         </button>
         <RecentTransactions
@@ -157,7 +171,11 @@ export function OverviewPage({
           </p>
         </section>
       )}
-      <button className="primary-button mobile-add" onClick={onAdd}>
+      <button
+        className="primary-button mobile-add"
+        disabled={readonly}
+        onClick={onAdd}
+      >
         <Plus size={18} />
         Adicionar transação
       </button>

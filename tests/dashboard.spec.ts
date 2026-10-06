@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
 import ExcelJS from "exceljs";
 import type { FinanceSettings } from "../src/types/finance";
 
@@ -95,19 +96,19 @@ for (const operation of ["cadastro", "importação"] as const) {
     // Simulate another writer changing settings after the form/preview captured its snapshot.
     await page.evaluate(async () => {
       await new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 3);
+        const req = indexedDB.open("vertice-finance", 4);
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
           const db = req.result;
-          const tx = db.transaction("settings", "readwrite");
-          const store = tx.objectStore("settings");
-          const read = store.get("personal");
+          const tx = db.transaction("scopedSettings", "readwrite");
+          const store = tx.objectStore("scopedSettings");
+          const read = store.openCursor();
           read.onsuccess = () => {
-            const settings = read.result as FinanceSettings;
+            const settings = read.result!.value.record as FinanceSettings;
             settings.categories = settings.categories.map((c) =>
               c.type === "expense" ? { ...c, id: `new-${c.id}` } : c,
             );
-            store.put(settings, "personal");
+            read.result!.update({ ...read.result!.value, record: settings });
           };
           tx.oncomplete = () => {
             db.close();
@@ -343,7 +344,7 @@ test("falha de gravação mantém formulário e não altera saldo", async ({
     IDBObjectStore.prototype.add = function (
       ...args: Parameters<IDBObjectStore["add"]>
     ) {
-      if (this.name === "transactions")
+      if (this.name === "scopedTransactions")
         throw new DOMException("Falha simulada", "QuotaExceededError");
       return put.apply(this, args);
     };
@@ -370,18 +371,18 @@ for (const operation of ["exclusão", "remoção demo"] as const) {
     await add(page, "Gasto demonstrativo", "85");
     await page.evaluate(async () => {
       await new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open("vertice-finance", 3);
+        const request = indexedDB.open("vertice-finance", 4);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const db = request.result;
-          const tx = db.transaction("transactions", "readwrite");
-          const store = tx.objectStore("transactions");
+          const tx = db.transaction("scopedTransactions", "readwrite");
+          const store = tx.objectStore("scopedTransactions");
           const rows = store.getAll();
           rows.onsuccess = () => {
             const demo = rows.result.find(
-              (row) => row.description === "Gasto demonstrativo",
+              (row) => row.record.description === "Gasto demonstrativo",
             );
-            store.put({ ...demo, source: "demo" });
+            store.put({ ...demo, record: { ...demo.record, source: "demo" } });
           };
           tx.oncomplete = () => {
             db.close();

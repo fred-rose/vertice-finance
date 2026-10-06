@@ -19,6 +19,8 @@ export function TransactionsPage({
   onEdit,
   onDelete,
   onImport,
+  readonly = false,
+  repository,
 }: {
   transactions: Transaction[];
   revision: number;
@@ -26,6 +28,8 @@ export function TransactionsPage({
   onEdit: (t: Transaction) => void;
   onDelete: (id: string, expectedRevision: number) => Promise<void>;
   onImport: () => void;
+  readonly?: boolean;
+  repository: import("../../services/workspaceRepository").WorkspaceRepository;
 }) {
   const [search, setSearch] = useState("");
   const [month, setMonth] = useState("");
@@ -36,6 +40,8 @@ export function TransactionsPage({
   const [deleting, setDeleting] = useState<{
     transaction: Transaction;
     revision: number;
+    onDelete: typeof onDelete;
+    repository: typeof repository;
   }>();
   const work = useUnsavedWork();
   const [busy, setBusyState] = useState(false);
@@ -82,7 +88,11 @@ export function TransactionsPage({
           </p>
         </div>
         <div className="row-actions">
-          <button className="secondary-button" onClick={onImport}>
+          <button
+            className="secondary-button"
+            disabled={readonly}
+            onClick={onImport}
+          >
             <Upload size={16} />
             Importar
           </button>
@@ -193,11 +203,13 @@ export function TransactionsPage({
             currentPage * 20,
           )}
           settings={settings}
+          readonly={readonly}
           onEdit={onEdit}
           onDelete={(t) => {
             setError("");
             setConflicted(false);
-            setDeleting({ transaction: t, revision });
+            if (!readonly)
+              setDeleting({ transaction: t, revision, onDelete, repository });
           }}
         />
       ) : (
@@ -246,12 +258,21 @@ export function TransactionsPage({
             <DialogClose disabled={busy}>Cancelar</DialogClose>
             <button
               className="danger-button"
-              disabled={busy || conflicted}
+              disabled={
+                readonly ||
+                busy ||
+                conflicted ||
+                deleting.repository !== repository ||
+                !deleting.repository.handle.active
+              }
               onClick={async () => {
                 if (work.get().busy) return;
                 setBusy(true);
                 try {
-                  await onDelete(deleting.transaction.id, deleting.revision);
+                  await deleting.onDelete(
+                    deleting.transaction.id,
+                    deleting.revision,
+                  );
                   setDeleting(undefined);
                 } catch (e) {
                   setConflicted(e instanceof LocalConflictError);

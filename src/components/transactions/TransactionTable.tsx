@@ -20,11 +20,13 @@ export function TransactionTable({
   settings,
   onEdit,
   onDelete,
+  readonly = false,
 }: {
   transactions: Transaction[];
   settings: FinanceSettings;
   onEdit?: (t: Transaction) => void;
   onDelete?: (t: Transaction) => void;
+  readonly?: boolean;
 }) {
   return (
     <div className="table-scroll">
@@ -93,6 +95,7 @@ export function TransactionTable({
                 <td>
                   <div className="row-actions">
                     <button
+                      disabled={readonly}
                       className="icon-button"
                       aria-label={`Editar ${t.description}`}
                       onClick={() => onEdit(t)}
@@ -100,6 +103,7 @@ export function TransactionTable({
                       <Pencil size={16} />
                     </button>
                     <button
+                      disabled={readonly}
                       className="icon-button danger-text"
                       aria-label={`Excluir ${t.description}`}
                       onClick={() => onDelete?.(t)}

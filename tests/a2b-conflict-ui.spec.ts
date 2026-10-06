@@ -1,6 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
 import { backupFixture } from "./helpers/backupFixture";
-import { rawLocal, repositoryBundle, seedLocal } from "./helpers/localData";
+import {
+  rawLocal,
+  uiRepositoryBundle as repositoryBundle,
+  seedLocal,
+} from "./helpers/localData";
 
 let bundle: string;
 test.beforeAll(async () => {

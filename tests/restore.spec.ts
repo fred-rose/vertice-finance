@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { backupFixture } from "./helpers/backupFixture";
 import {
@@ -7,28 +8,15 @@ import {
 } from "../src/features/transactions/backup";
 import type { FinanceSnapshot } from "../src/types/finance";
 
+import { rawLocal } from "./helpers/localData";
 async function persisted(page: Page): Promise<FinanceSnapshot> {
-  return page.evaluate(
-    () =>
-      new Promise((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 3);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction(["transactions", "settings"]);
-          const rows = tx.objectStore("transactions").getAll();
-          const settings = tx.objectStore("settings").get("personal");
-          tx.oncomplete = () => {
-            db.close();
-            resolve({ transactions: rows.result, settings: settings.result });
-          };
-          tx.onabort = () => {
-            db.close();
-            reject(tx.error);
-          };
-        };
-      }),
-  );
+  const r = await rawLocal(page);
+  return {
+    transactions: r.transactions as FinanceSnapshot["transactions"],
+    settings: r.settings[
+      r.keys.indexOf("personal")
+    ] as FinanceSnapshot["settings"],
+  };
 }
 async function openRestore(
   page: Page,
@@ -205,7 +193,7 @@ for (const failure of ["download", "read", "serialization"] as const) {
         const get = IDBObjectStore.prototype.get;
         IDBObjectStore.prototype.get = function (...args) {
           const request = get.apply(this, args);
-          if (this.name === "settings") this.transaction.abort();
+          if (this.name === "scopedSettings") this.transaction.abort();
           return request;
         };
       }
@@ -242,7 +230,7 @@ test("erro do repository após clear mostra mensagem útil e mantém estado apó
     const original = IDBObjectStore.prototype.add;
     let calls = 0;
     IDBObjectStore.prototype.add = function (...args) {
-      if (this.name === "transactions" && ++calls === 2)
+      if (this.name === "scopedTransactions" && ++calls === 2)
         throw new DOMException("injected-private-detail", "QuotaExceededError");
       return original.apply(this, args);
     };
@@ -267,14 +255,17 @@ test("alteração entre download e confirmação exige uma nova cópia", async (
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open("vertice-finance", 3);
+        const req = indexedDB.open("vertice-finance", 4);
         req.onsuccess = () => {
           const db = req.result;
-          const tx = db.transaction("settings", "readwrite");
-          const s = tx.objectStore("settings");
-          const read = s.get("personal");
+          const tx = db.transaction("scopedSettings", "readwrite");
+          const s = tx.objectStore("scopedSettings");
+          const read = s.openCursor();
           read.onsuccess = () =>
-            s.put({ ...read.result, plannedIncome: 444 }, "personal");
+            read.result!.update({
+              ...read.result!.value,
+              record: { ...read.result!.value.record, plannedIncome: 444 },
+            });
           tx.oncomplete = () => {
             db.close();
             resolve();
@@ -298,25 +289,27 @@ test("divergência pós-commit é crítica e não dispara segunda escrita", asyn
   const dialog = await openRestore(page);
   await safetyDownload(page);
   await page.evaluate(() => {
-    const clear = IDBObjectStore.prototype.clear;
-    const getAll = IDBObjectStore.prototype.getAll;
+    const put = IDBObjectStore.prototype.put;
+    const getAll = IDBIndex.prototype.getAll;
     let replacementStarted = false;
-    IDBObjectStore.prototype.clear = function () {
-      const result = clear.call(this);
-      // The precondition reads were already queued before clear. The next
-      // getAll belongs to verification; avoid relying on complete listener order.
-      replacementStarted = true;
+    IDBObjectStore.prototype.put = function (...args) {
+      const result = put.apply(this, args);
+      // Replacement queues settings after the CAS reads, including an empty destination.
+      if (this.name === "scopedSettings") replacementStarted = true;
       return result;
     };
-    IDBObjectStore.prototype.getAll = function (...args) {
+    IDBIndex.prototype.getAll = function (...args) {
       const request = getAll.apply(this, args);
-      if (replacementStarted && this.name === "transactions") {
+      if (
+        replacementStarted &&
+        this.objectStore.name === "scopedTransactions"
+      ) {
         request.addEventListener("success", () => {
           const rows = structuredClone(request.result);
-          rows[0].amount += 1;
+          rows[0].record.amount += 1;
           Object.defineProperty(request, "result", { value: rows });
         });
-        IDBObjectStore.prototype.getAll = getAll;
+        IDBIndex.prototype.getAll = getAll;
       }
       return request;
     };

@@ -112,6 +112,8 @@ export function createScopedTransactionRepository(
         createdAt: input.createdAt,
         source: input.source,
       };
+      if (input.createdAt === undefined) delete row.createdAt;
+      if (input.source === undefined) delete row.source;
       rawSnapshot({ transactions: [row], settings: snapshot.settings });
       transactionKey(id, row.id);
       const store = tx.objectStore(S.transactions);
@@ -145,8 +147,11 @@ export function createScopedTransactionRepository(
         createdAt: row.createdAt,
         source: row.source,
       }));
-      for (const row of validated)
+      for (const row of validated) {
+        if (row.createdAt === undefined) delete row.createdAt;
+        if (row.source === undefined) delete row.source;
         rawSnapshot({ transactions: [row], settings: snapshot.settings });
+      }
       const signatures = new Set(
         snapshot.transactions.map(transactionSignature),
       );
@@ -205,6 +210,12 @@ export function createScopedTransactionRepository(
       const receipt = await write(command, (tx, current, abort) => {
         if (!sameBackupSnapshot(previous.snapshot, current))
           throw new RestoreError("changed");
+        // Persist atomically with the replacement and CAS receipt. Focus can
+        // detect a restore without relying on an advisory BroadcastChannel.
+        tx.objectStore(S.metadata).put(
+          command.precondition.expectedRevision + 1,
+          ["restore", id],
+        );
         const store = tx.objectStore(S.transactions);
         const cursor = store
           .index(WORKSPACE_INDEX)
@@ -230,6 +241,11 @@ export function createScopedTransactionRepository(
       revision = receipt.revision;
     } catch (cause) {
       if (cause instanceof RestoreError) throw cause;
+      if (
+        cause instanceof ScopedStorageError &&
+        cause.cause instanceof RestoreError
+      )
+        throw cause.cause;
       if (cause instanceof ScopedStorageError && cause.code === "stale-state")
         throw new RestoreError("changed", cause);
       throw new RestoreError("write", cause);

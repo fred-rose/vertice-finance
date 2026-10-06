@@ -21,10 +21,7 @@ import {
 } from "../../features/dashboard/calculations";
 import { MoneyError } from "../../utils/money";
 import { validateSettings } from "../../features/transactions/validation";
-import {
-  downloadBackup,
-  downloadTransactions,
-} from "../../features/transactions/importExport";
+import { downloadTransactions } from "../../features/transactions/importExport";
 import {
   calculationUnavailable,
   accountBalanceLabel,
@@ -41,6 +38,8 @@ export function SettingsPage({
   onRestore,
   invalidated = false,
   onDiscard,
+  readonly = false,
+  onExport,
 }: {
   settings: FinanceSettings;
   today: CivilDate;
@@ -53,6 +52,8 @@ export function SettingsPage({
   onRestore: () => void;
   invalidated?: boolean;
   onDiscard: () => void;
+  readonly?: boolean;
+  onExport: () => Promise<void>;
 }) {
   const work = useUnsavedWork("settings");
   const invalid = useInvalidated(invalidated);
@@ -68,8 +69,24 @@ export function SettingsPage({
   };
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [exportError, setExportError] = useState("");
+  async function exportJSON() {
+    if (work.get().busy || invalid.current) return;
+    setExportError("");
+    setBusy(true);
+    try {
+      await onExport();
+    } catch {
+      if (!invalid.current)
+        setExportError(
+          "Não foi possível preparar ou iniciar o download. Tente novamente com uma sessão válida.",
+        );
+    } finally {
+      setBusy(false);
+    }
+  }
   function change(next: FinanceSettings) {
-    if (invalid.current) return;
+    if (invalid.current || readonly) return;
     work.set({ hasUnsavedWork: editableKey(next) !== base.current });
     setSaved(false);
     setDraft(next);
@@ -122,7 +139,8 @@ export function SettingsPage({
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (conflicted || busy || work.get().busy || invalid.current) return;
+    if (readonly || conflicted || busy || work.get().busy || invalid.current)
+      return;
     setError("");
     setSaved(false);
     setBusy(true);
@@ -192,7 +210,7 @@ export function SettingsPage({
           </button>
         </section>
       )}
-      <fieldset disabled={busy}>
+      <fieldset disabled={busy || readonly}>
         <section className="panel settings-section">
           <h2>Contas e ponto de partida</h2>
           <p>
@@ -692,6 +710,7 @@ export function SettingsPage({
       </fieldset>
       <section className="panel settings-section">
         <h2>Seus dados, com você</h2>
+        {exportError && <p role="alert">{exportError}</p>}
         <p>
           Os dados ficam neste navegador. Exporte transações em CSV para
           reimportar pela tela Transações. O arquivo JSON também guarda contas,
@@ -702,7 +721,7 @@ export function SettingsPage({
           <button
             type="button"
             className="secondary-button"
-            disabled={busy}
+            disabled={busy || readonly}
             onClick={() =>
               request(() => {
                 reset();
@@ -723,7 +742,8 @@ export function SettingsPage({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => downloadBackup(settings, transactions)}
+            disabled={busy}
+            onClick={() => void exportJSON()}
           >
             <Download size={16} />
             Exportar dados completos (JSON)

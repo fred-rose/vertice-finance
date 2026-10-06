@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -27,11 +27,82 @@ import { PwaControls } from "./components/pwa/PwaControls";
 import { useBeforeUnload, useUnsavedWork } from "./hooks/useUnsavedWork";
 import { workRegistry } from "./hooks/unsavedWork";
 import type { FinanceSnapshot, FinanceSettings } from "./types/finance";
+import {
+  createStorageBootstrap,
+  type BootState,
+  type PersonalContext,
+} from "./services/storageBootstrap";
+import { StorageStartup } from "./components/settings/StorageStartup";
+import { ScopedStorageError } from "./services/scopedStorageProtocol";
+import { downloadBackup } from "./features/transactions/importExport";
+import type { WorkspaceRepository } from "./services/workspaceRepository";
 export default function App() {
   useBeforeUnload();
+  const [state, setState] = useState<BootState>({ status: "loading" });
+  const [coordinator, setCoordinator] = useState<ReturnType<
+    typeof createStorageBootstrap
+  > | null>(null);
+  const retained = useRef<PersonalContext | null>(null);
+  useEffect(() => {
+    const boot = createStorageBootstrap();
+    setCoordinator(boot);
+    const off = boot.subscribe(() => setState(boot.getState()));
+    void boot.start();
+    return () => {
+      off();
+      boot.dispose();
+    };
+  }, []);
+  const recover = useCallback(
+    (error: Error) => coordinator?.recover(error),
+    [coordinator],
+  );
+  const recapture = useCallback(() => coordinator?.recapture(), [coordinator]);
+  if (state.status === "ready") retained.current = state.context;
+  const context = retained.current;
+  return context ? (
+    <FinanceApp
+      context={context}
+      onFailure={recover}
+      onInvalidated={recapture}
+      storageState={state}
+      coordinator={coordinator!}
+    />
+  ) : (
+    <main className="dashboard-content">
+      <PwaControls showInstall={false} />
+      {coordinator ? (
+        <StorageStartup
+          key={state.status}
+          state={state}
+          coordinator={coordinator}
+        />
+      ) : (
+        <p role="status">Verificando os dados locais…</p>
+      )}
+    </main>
+  );
+}
+function FinanceApp({
+  context,
+  onInvalidated,
+  onFailure,
+  storageState,
+  coordinator,
+}: {
+  context: PersonalContext;
+  onInvalidated: () => void;
+  onFailure: (error: Error) => void;
+  storageState: BootState;
+  coordinator: ReturnType<typeof createStorageBootstrap>;
+}) {
+  useBeforeUnload();
   const actionWork = useUnsavedWork();
-  const finance = useTransactions();
-  const snapshot = finance.snapshot;
+  const finance = useTransactions(context.repository, onInvalidated, onFailure);
+  const storageReady = storageState.status === "ready";
+  const snapshot = storageReady ? finance.snapshot : null;
+  const exhausted = finance.revision === Number.MAX_SAFE_INTEGER;
+  const writable = !!snapshot && !exhausted && context.repository.handle.active;
   const navigation = usePage();
   const page = navigation.page;
   const today = useCivilToday();
@@ -41,17 +112,23 @@ export default function App() {
     revision: number;
     version: number;
     settings: FinanceSettings;
+    finance: typeof finance;
+    repository: WorkspaceRepository;
   } | null>(null);
   const [importing, setImporting] = useState<{
     revision: number;
     version: number;
     snapshot: FinanceSnapshot;
+    finance: typeof finance;
+    repository: WorkspaceRepository;
   } | null>(null);
   const [settingsSession, setSettingsSession] = useState<{
     revision: number;
     version: number;
     snapshot: FinanceSnapshot;
     id: number;
+    finance: typeof finance;
+    repository: WorkspaceRepository;
   } | null>(null);
   const nextSession = useRef(0);
   useEffect(() => {
@@ -67,7 +144,8 @@ export default function App() {
     }
     if (
       !settingsSession ||
-      (settingsSession.version !== finance.restoreVersion &&
+      ((settingsSession.version !== finance.restoreVersion ||
+        settingsSession.repository !== context.repository) &&
         !retainedWork.hasUnsavedWork &&
         !retainedWork.busy)
     )
@@ -76,6 +154,8 @@ export default function App() {
         version: finance.restoreVersion,
         snapshot,
         id: ++nextSession.current,
+        finance,
+        repository: context.repository,
       });
   }, [
     page,
@@ -83,35 +163,46 @@ export default function App() {
     settingsSession,
     finance.revision,
     finance.restoreVersion,
+    context.repository,
   ]);
   const restoreKey = finance.restoreVersion * 2 + (snapshot ? 0 : 1);
   const openEditor = (transaction?: Transaction) => {
-    if (snapshot && !editor)
+    if (writable && snapshot && !editor)
       setEditor({
         transaction,
         revision: finance.revision!,
         version: finance.restoreVersion,
         settings: snapshot.settings,
+        finance,
+        repository: context.repository,
       });
   };
   const openImport = () => {
-    if (snapshot && !importing)
+    if (writable && snapshot && !importing)
       setImporting({
         revision: finance.revision!,
         version: finance.restoreVersion,
         snapshot,
+        finance,
+        repository: context.repository,
       });
   };
-  const [restoring, setRestoring] = useState(false);
+  const [restoring, setRestoring] = useState<{
+    finance: typeof finance;
+    previewOnly: boolean;
+  } | null>(null);
   const [restorePending, setRestorePending] = useState(false);
   function requestRestore() {
+    if (exhausted) return;
+    if (!writable && storageState.status !== "recovery" && !finance.error)
+      return;
     const flags = workRegistry.read();
     if (flags.busy) {
       setNotice("Aguarde a operação terminar.");
       return;
     }
     if (flags.hasUnsavedWork) setRestorePending(true);
-    else setRestoring(true);
+    else setRestoring({ finance, previewOnly: !writable });
   }
   const [notice, setNotice] = useState("");
   const [removeDemo, setRemoveDemo] = useState<number | null>(null);
@@ -143,7 +234,21 @@ export default function App() {
   async function save(input: NewTransaction) {
     if (!editor || !snapshot || editor.version !== finance.restoreVersion)
       return;
-    await finance.saveTransaction(input, editor.revision, editor.transaction);
+    if (
+      editor.repository !== context.repository ||
+      !editor.repository.handle.active
+    )
+      throw new ScopedStorageError("closed");
+    await editor.finance.saveTransaction(
+      input,
+      editor.revision,
+      editor.transaction,
+    );
+    if (
+      editor.repository !== context.repository ||
+      !editor.repository.handle.active
+    )
+      return;
     setSelected(monthKey(input.date));
     setNotice("Transação salva. Sua visão geral está atualizada.");
   }
@@ -213,7 +318,7 @@ export default function App() {
             {page !== "settings" && (
               <button
                 className={`primary-button ${page === "overview" ? "desktop-add" : ""}`}
-                disabled={!snapshot || finance.loading || !!finance.error}
+                disabled={!writable || finance.loading || !!finance.error}
                 onClick={() => openEditor()}
               >
                 <Plus size={18} />
@@ -223,10 +328,22 @@ export default function App() {
           </div>
         </div>
         <PwaControls showInstall={page === "settings"} />
-        {finance.loading ? (
+        {!storageReady ? (
+          <StorageStartup
+            state={storageState}
+            coordinator={coordinator}
+            onPreview={requestRestore}
+          />
+        ) : finance.loading ? (
           <div className="panel empty-state" role="status">
             Preparando sua visão financeira…
           </div>
+        ) : finance.error instanceof ScopedStorageError ? (
+          <StorageStartup
+            state={{ status: "recovery", error: finance.error }}
+            coordinator={coordinator}
+            onPreview={requestRestore}
+          />
         ) : finance.error ? (
           <LocalDataRecovery
             error={finance.error}
@@ -235,6 +352,13 @@ export default function App() {
           />
         ) : snapshot ? (
           <>
+            {exhausted && (
+              <p role="status">
+                A revisão local atingiu seu limite. A leitura e a exportação
+                continuam disponíveis, mas a escrita neste Personal não pode
+                continuar.
+              </p>
+            )}
             {demoCount > 0 && (
               <div className="demo-banner">
                 <span>
@@ -243,6 +367,7 @@ export default function App() {
                 </span>
                 <button
                   className="text-link"
+                  disabled={!writable}
                   onClick={() => {
                     setActionError("");
                     setActionConflict(false);
@@ -259,6 +384,7 @@ export default function App() {
                 settings={snapshot.settings}
                 selected={selected}
                 today={today}
+                readonly={!writable}
                 onAdd={() => openEditor()}
                 onImport={openImport}
               />
@@ -267,6 +393,8 @@ export default function App() {
                 transactions={snapshot.transactions}
                 settings={snapshot.settings}
                 revision={finance.revision!}
+                readonly={!writable}
+                repository={context.repository}
                 onEdit={(transaction) => openEditor(transaction)}
                 onDelete={async (id, revision) => {
                   await finance.removeTransaction(id, revision);
@@ -287,9 +415,24 @@ export default function App() {
             transactions={(snapshot ?? settingsSession.snapshot).transactions}
             revision={finance.revision ?? settingsSession.revision}
             invalidated={
-              !snapshot || settingsSession.version !== finance.restoreVersion
+              !snapshot ||
+              settingsSession.version !== finance.restoreVersion ||
+              settingsSession.repository !== context.repository ||
+              !settingsSession.repository.handle.active
             }
-            onSave={finance.saveSettings}
+            readonly={exhausted}
+            onExport={async () => {
+              const read = await settingsSession.repository.readForBackup();
+              if (!settingsSession.repository.handle.active) return;
+              settingsSession.repository.handle.assertSession(
+                settingsSession.repository.handle.lease,
+              );
+              downloadBackup(
+                read.snapshot.settings,
+                read.snapshot.transactions,
+              );
+            }}
+            onSave={settingsSession.finance.saveSettings}
             onRestore={requestRestore}
             onDiscard={() => setSettingsSession(null)}
           />
@@ -357,7 +500,7 @@ export default function App() {
                 setImporting(null);
                 setSettingsSession(null);
                 setRestorePending(false);
-                setRestoring(true);
+                setRestoring({ finance, previewOnly: !writable });
               }}
             >
               Descartar e continuar
@@ -369,7 +512,12 @@ export default function App() {
         <AddTransactionModal
           settings={editor.settings}
           today={today}
-          invalidated={!snapshot || editor.version !== finance.restoreVersion}
+          invalidated={
+            !snapshot ||
+            editor.version !== finance.restoreVersion ||
+            editor.repository !== context.repository ||
+            !editor.repository.handle.active
+          }
           transaction={editor.transaction}
           onSave={save}
           onClose={() => setEditor(null)}
@@ -378,11 +526,24 @@ export default function App() {
       {restoring && (
         <RestoreBackupDialog
           invalidationKey={restoreKey}
-          readForBackup={finance.readForBackup}
-          onClose={() => setRestoring(false)}
+          previewOnly={restoring.previewOnly}
+          invalidated={
+            !restoring.previewOnly &&
+            (!storageReady ||
+              restoring.finance.repository !== context.repository ||
+              !restoring.finance.repository.handle.active)
+          }
+          readForBackup={
+            restoring.previewOnly
+              ? () => Promise.reject(new ScopedStorageError("invalid-snapshot"))
+              : restoring.finance.readForBackup
+          }
+          onClose={() => setRestoring(null)}
           onRestore={async (next, previous) => {
-            await finance.restoreBackup(next, previous);
-            setRestoring(false);
+            if (restoring.previewOnly)
+              throw new ScopedStorageError("invalid-snapshot");
+            await restoring.finance.restoreBackup(next, previous);
+            setRestoring(null);
             setNotice(
               "Backup restaurado e verificado. Seus dados foram recuperados.",
             );
@@ -395,10 +556,17 @@ export default function App() {
           settings={(snapshot ?? importing.snapshot).settings}
           transactions={(snapshot ?? importing.snapshot).transactions}
           invalidated={
-            !snapshot || importing.version !== finance.restoreVersion
+            !snapshot ||
+            importing.version !== finance.restoreVersion ||
+            importing.repository !== context.repository ||
+            !importing.repository.handle.active
           }
           onImport={(items, skip) =>
-            finance.importTransactions(items, skip, importing.revision)
+            importing.finance.importTransactions(
+              items,
+              skip,
+              importing.revision,
+            )
           }
           onClose={() => setImporting(null)}
         />

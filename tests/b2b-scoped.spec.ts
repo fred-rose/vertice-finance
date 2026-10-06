@@ -514,9 +514,13 @@ test("restore safety scope mismatch, post-commit verify error without compensati
       b = await window.repoB.load();
     const get = IDBObjectStore.prototype.get;
     let writes = 0;
+    const writeTransactions = new Set<IDBTransaction>();
     const put = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (...args) {
-      if (this.name === "workspaceMeta") writes++;
+      if (this.name === "workspaceMeta") {
+        writeTransactions.add(this.transaction);
+        writes = writeTransactions.size;
+      }
       return put.apply(this, args);
     };
     IDBObjectStore.prototype.get = function (...args) {
@@ -554,6 +558,7 @@ test("restore safety scope mismatch, post-commit verify error without compensati
   expect(result.phase).toBe("verify");
   expect(result.writes).toBe(1);
   expect(result.a.revision).toBe(1);
+  expect(result.a.restoreRevision).toBe(1);
   expect(result.a.snapshot.transactions).toEqual([]);
   expect(result.afterB).toEqual(result.beforeB);
 });

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
 import { backupFixture } from "./helpers/backupFixture";
 
 for (const fault of ["blob", "object-url", "anchor-click"] as const) {

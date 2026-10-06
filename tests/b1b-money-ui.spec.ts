@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "./helpers/appTest";
+import type { Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { defaultSettings } from "../src/data/catalog";
 import type { Transaction } from "../src/types/finance";
@@ -85,7 +86,9 @@ test("overflow real de snapshot válido mantém lista, edição CAS e exportaç�
     .getByLabel("Descrição", { exact: true })
     .fill("Editável durante overflow");
   await dialog.getByRole("button", { name: "Salvar transação" }).click();
-  await expect(dialog).toHaveCount(0);
+  // This scenario has ~90k rows and an existing 120s total test budget.
+  // Await the complete CAS write + authoritative refresh within that same budget.
+  await expect(dialog).toHaveCount(0, { timeout: 120000 });
   await expect(page.locator(".filter-summary")).toContainText(unavailable);
   await page.getByRole("link", { name: "Configurações", exact: true }).click();
   await expect(
@@ -115,15 +118,22 @@ test("overflow real de snapshot válido mantém lista, edição CAS e exportaç�
           open.onerror = () => reject(open.error);
           open.onsuccess = () => {
             const db = open.result,
-              tx = db.transaction(["transactions", "settings"]);
-            const count = tx.objectStore("transactions").count(),
-              meta = tx
-                .objectStore("settings")
-                .get("__vertice_local_concurrency__");
+              tx = db.transaction(["scopedTransactions", "workspaceMeta"]);
+            const count = tx.objectStore("scopedTransactions").count(),
+              manifest = tx.objectStore("workspaceMeta").get("authority");
+            let revision: number;
+            manifest.onsuccess = () => {
+              const meta = tx
+                .objectStore("workspaceMeta")
+                .get(["workspace", manifest.result.defaultWorkspaceId]);
+              meta.onsuccess = () => {
+                revision = meta.result.revision;
+              };
+            };
             tx.oncomplete = () => {
               resolve({
                 count: count.result,
-                revision: meta.result.revision,
+                revision,
                 version: db.version,
               });
               db.close();
@@ -139,7 +149,7 @@ test("overflow real de snapshot válido mantém lista, edição CAS e exportaç�
   expect(state).toEqual({
     count: transactions.length,
     revision: 1,
-    version: 3,
+    version: 4,
   });
   expect(errors).toEqual([]);
 });

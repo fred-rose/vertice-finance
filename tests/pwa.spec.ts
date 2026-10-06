@@ -7,6 +7,7 @@ import { build } from "vite";
 import ExcelJS from "exceljs";
 import config from "../vite.config";
 import { backupFixture } from "./helpers/backupFixture";
+import { rawDatabase } from "./helpers/b2cData";
 import { rawLocal } from "./helpers/localData";
 
 let origin: string;
@@ -112,28 +113,12 @@ async function add(
   await expect(dialog).toHaveCount(0);
 }
 async function snapshot(page: Page) {
-  return page.evaluate(
-    async () =>
-      new Promise((done, reject) => {
-        const req = indexedDB.open("vertice-finance", 3);
-        req.onsuccess = () => {
-          const db = req.result;
-          const tx = db.transaction(["transactions", "settings"]);
-          const rows = tx.objectStore("transactions").getAll();
-          const settings = tx.objectStore("settings").get("personal");
-          tx.oncomplete = () => {
-            db.close();
-            done({
-              version: db.version,
-              rows: rows.result,
-              settings: settings.result,
-            });
-          };
-          tx.onabort = () => reject(tx.error);
-        };
-        req.onerror = () => reject(req.error);
-      }),
-  );
+  const raw = await rawLocal(page);
+  return {
+    version: (await rawDatabase(page)).version,
+    rows: raw.transactions,
+    settings: raw.settings[raw.keys.indexOf("personal")],
+  };
 }
 
 test("manifest instalável, ícones, metadados iOS e precache sem ExcelJS", async ({
@@ -728,4 +713,78 @@ test("XLSX ainda não carregado explica a limitação offline e CSV continua dis
   await page.getByRole("button", { name: "Importar 1 transações" }).click();
   await page.getByRole("button", { name: "Concluir" }).click();
   await expect(page.locator(".primary-metric h2")).toContainText("19,90");
+});
+
+test("B2c real waiting PWA does not interrupt held migration or gain reload permission", async ({
+  page,
+}) => {
+  await page.goto(origin + "/favicon.svg");
+  const { seedLocal } = await import("./helpers/localData");
+  await seedLocal(page, { ...backupFixture(), present: true });
+  await page.goto(origin);
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await expect(
+    page.getByRole("heading", {
+      name: "Atualização dos dados locais",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await waitingUpdate(page);
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Baixar cópia de segurança", exact: true })
+    .click();
+  await download;
+  await page.getByLabel("Confirmei que guardei a cópia de segurança").check();
+  await page.evaluate(() => {
+    const add = IDBObjectStore.prototype.add;
+    let held = false;
+    IDBObjectStore.prototype.add = function (...args) {
+      const r = add.apply(this, args);
+      if (this.name === "scopedTransactions" && !held) {
+        held = true;
+        const tx = this.transaction;
+        let release = false;
+        Object.assign(window, {
+          releaseMigration: () => {
+            release = true;
+          },
+        });
+        r.addEventListener("success", () => {
+          document.documentElement.setAttribute("data-copy-held", "true");
+          const keep = () => {
+            const q = tx.objectStore("settings").get("personal");
+            q.onsuccess = () => {
+              if (!release) keep();
+            };
+          };
+          keep();
+        });
+      }
+      return r;
+    };
+  });
+  await page
+    .getByRole("button", { name: "Atualizar dados locais", exact: true })
+    .click();
+  await page.waitForFunction(
+    () => document.documentElement.getAttribute("data-copy-held") === "true",
+  );
+  const update = page.getByRole("button", { name: "Atualizar", exact: true });
+  await expect(update).toBeDisabled();
+  await update.evaluate((el) => (el as HTMLButtonElement).click());
+  await page.evaluate(() =>
+    navigator.serviceWorker.dispatchEvent(new Event("controllerchange")),
+  );
+  await expect(page.getByRole("status")).toContainText(
+    "Atualizando os dados locais",
+  );
+  await page.evaluate(() =>
+    (window as unknown as { releaseMigration: () => void }).releaseMigration(),
+  );
+  await expect(page.locator(".primary-metric")).toBeVisible();
+  await expect(page.locator('meta[name="test-release"]')).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Atualizar", exact: true }),
+  ).toBeEnabled();
 });

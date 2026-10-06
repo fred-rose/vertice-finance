@@ -353,7 +353,10 @@ test("VersionError real de abertura preserva cause, mensagem segura e banco", as
   expect(result.version).toBe(4);
   expect(result.stores).toEqual(["settings", "transactions"]);
   await page.goto("/");
-  await expect(page.getByRole("alert")).toHaveText(result.error!.message);
+  await expect(page.getByRole("alert")).toContainText("invalid-layout");
+  await expect(page.getByRole("alert")).toContainText(
+    "Seus registros foram preservados",
+  );
   await expect(page.getByRole("alert")).not.toContainText(
     /VersionError|requested version|existing version/,
   );
