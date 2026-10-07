@@ -91,3 +91,38 @@ Não houve escrita nos worktrees principal/B1/B2, rural ou Supabase/cloud/auth. 
 
 Commit seletivo solicitado: `feat: adiciona TopoField ao Vertice`.
 Bloqueadores da entrega P1b: nenhum no escopo P1b.
+
+## Refinamento visual — 07/10/2026, base 072a1a2
+
+Refinamento exclusivo de presença visual, na mesma branch `feat/p1b-topofield`. Os valores abaixo atualizam a área e os parâmetros do checkpoint original documentado acima.
+
+| Parâmetro                             | Antes          | Depois                                   |
+| ------------------------------------- | -------------- | ---------------------------------------- |
+| Região visual desktop medida a 1280px | 1.184 × 130px  | 1.184 × 272px                            |
+| Altura mínima do cabeçalho desktop    | altura natural | 240px (+32px da camada absoluta)         |
+| Opacity padrão                        | 0,20           | 0,36                                     |
+| Density padrão                        | 7              | 6                                        |
+| Intensidade dos contornos no shader   | 0,55           | 0,85                                     |
+| Intensidade do grid                   | 0,055          | 0,075                                    |
+| Escala espacial                       | 0,40           | 0,65                                     |
+| Speed                                 | 0,025          | 0,025, preservada                        |
+| Fade                                  | linear lateral | radial elíptico, transparente nas bordas |
+
+Usado o próprio `page-heading`: apenas sua altura mínima em desktop aumenta. Título, controles e CTA permanecem no flex existente; o conteúdo seguinte continua no fluxo abaixo do cabeçalho ampliado. Não há novo container, hero financeiro, alteração em App.tsx ou shader atrás do card inteiro de onboarding/KPIs.
+
+Inspeção antes/depois em capturas desktop de 1280px e escala CSS 100%: as curvas são identificáveis imediatamente no centro, com mint mais presente, sem neon/glow e com desaparecimento suave nas bordas. Texto e CTA mantêm contraste alto. Inspecionadas Overview vazia e com receita sintética de R$ 1.200, sidebar fechada/aberta e reduced motion. A captura com dados é feita no topo e sem foco transitório no skip link, para comparação consistente.
+
+Evidências em `%TEMP%\vertice-topofield-refinement-20261007\before` e `after-directed`, com screenshots originais, sem edição ou redimensionamento. Não são incluídas no commit.
+
+Arquitetura e proteções inalteradas: WebGL direto; sem iframe/CDN ou dependência nova; pause hidden/offscreen; cleanup completo; DPR 1,25/largura 1.536px; até 30 draws/s; frame estático em reduced motion; fallback mobile até 700px e fallback por falha WebGL. O diff do TSX modifica somente defaults de density/opacity; nenhuma função de lifecycle foi editada. Sidebar P1a, B1/B2 e testes financeiros permanecem intactos.
+
+Na amostra dirigida de 90 intervalos RAF, cadência aproximada 164,96 fps com efeito e 165,02 sem efeito; p95 6,20ms em ambos. Buffer agora 1.184 × 272, DPR medido 1. Continua ACEITÁVEL no ambiente medido; não se infere certificação física/GPU ou percentual de CPU/memória.
+
+Validação deste refinamento: unit **673/673 PASS**, build **PASS**, dirigidos iniciais P1a/P1b **13/13 PASS**; dirigidos finais P1b **7/7 PASS**; regressão completa **372/372 PASS, zero skips/falhas/flaky (9,5 min)**. Zero skips novos. Prettier restrito aos arquivos alterados e `git diff --check`: PASS.
+
+Única alteração de teste: assertiva de altura 220–300px, opacity/min-height esperados e normalização da captura com dados. Não há comparação de pixels exatos, alteração de testes financeiros ou retirada de proteções.
+
+Arquivos: `TopoFieldBackground.css`, `TopoFieldBackground.tsx`, `topoFieldShaders.ts`, `tests/p1b-topofield.spec.ts` e este relatório. PNGs rastreados regenerados pelos E2E são repostos aos bytes do HEAD antes do commit.
+
+Commit solicitado: `fix: reforca presenca visual do TopoField`.
+Componente 3 não iniciado. Worktrees principal/B1/B2 intactos; sem merge/cloud/auth/Supabase.

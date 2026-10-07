@@ -12,8 +12,8 @@ interface TopoFieldProps {
 /** Decorative only: no financial data or persistence. */
 export function TopoFieldBackground({
   speed = 0.025,
-  density = 7,
-  opacity = 0.2,
+  density = 6,
+  opacity = 0.36,
   className = "",
 }: TopoFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

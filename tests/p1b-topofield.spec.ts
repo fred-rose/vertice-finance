@@ -85,6 +85,14 @@ test("Overview has real decorative WebGL, routes unmount it and release resource
   await audit(page);
   await page.goto("/");
   await expect(background(page)).toHaveAttribute("data-renderer", "webgl");
+  const region = await background(page).boundingBox();
+  expect(region!.height).toBeGreaterThanOrEqual(220);
+  expect(region!.height).toBeLessThanOrEqual(300);
+  await expect(background(page)).toHaveCSS("opacity", "0.36");
+  await expect(page.locator(".overview-topofield-host")).toHaveCSS(
+    "min-height",
+    "240px",
+  );
   await expect(background(page)).toHaveAttribute("aria-hidden", "true");
   await expect(background(page).locator("canvas")).toHaveAttribute(
     "aria-hidden",
@@ -274,6 +282,8 @@ test("synthetic transaction leaves existing summary intact; compare frame gaps w
   await dialog.getByRole("button", { name: "Salvar transação" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator(".primary-metric h2")).toContainText("1.200,00");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator(".page-heading h1").click();
   await page.mouse.move(600, 500);
   await page.screenshot({
     path: info.outputPath("overview-populated.png"),

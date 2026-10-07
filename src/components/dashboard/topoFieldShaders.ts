@@ -62,13 +62,13 @@ float snoise(vec2 v) {
 }
 void main() {
   vec2 uv=gl_FragCoord.xy/resolution;
-  vec2 p=gl_FragCoord.xy/max(resolution.y,1.0)*0.4;
+  vec2 p=gl_FragCoord.xy/max(resolution.y,1.0)*0.65;
   float elevation=snoise(p+vec2(time,-time*0.4))+0.22*snoise(p*2.0+time*0.3);
   float distanceToLine=abs(fract(elevation*density)-0.5);
   float line=1.0-smoothstep(0.012,0.065,distanceToLine);
   vec2 cell=abs(fract(gl_FragCoord.xy/42.0)-0.5);
   float grid=smoothstep(0.48,0.5,max(cell.x,cell.y));
   float edge=smoothstep(0.0,0.12,uv.y)*smoothstep(0.0,0.12,1.0-uv.y);
-  gl_FragColor=vec4(vec3(0.694,0.902,0.773), (line*0.55+grid*0.055)*edge);
+  gl_FragColor=vec4(vec3(0.694,0.902,0.773), (line*0.85+grid*0.075)*edge);
 }
 `;
