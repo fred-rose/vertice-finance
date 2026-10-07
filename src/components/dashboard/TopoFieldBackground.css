@@ -1,32 +1,55 @@
-.overview-topofield-host {
+.dashboard-content.overview-topofield-composition {
   position: relative;
   isolation: isolate;
+  padding-top: 24px;
 }
-.overview-topofield-host > :not(.topofield-background) {
+.overview-topofield-composition > :not(.topofield-background) {
   position: relative;
   z-index: 1;
 }
+.overview-topofield-composition > .page-heading {
+  margin-bottom: 18px;
+}
+.overview-topofield-composition .welcome-panel {
+  margin-top: 0;
+  padding: clamp(24px, 3vw, 40px);
+  border-color: #b1e6c526;
+  background: linear-gradient(
+    110deg,
+    #151a17f2 0%,
+    #151a17d6 45%,
+    #151a1766 100%
+  );
+}
+.overview-topofield-composition .summary {
+  border-color: #b1e6c526;
+  background: linear-gradient(
+    110deg,
+    #151a17f5 0%,
+    #151a17e6 48%,
+    #151a17b8 100%
+  );
+}
 .topofield-background {
   position: absolute;
-  inset: -16px -18px;
+  inset: 0 20px auto;
+  height: 520px;
   z-index: 0;
   overflow: hidden;
   border-radius: 12px;
   pointer-events: none;
   background:
-    linear-gradient(#b1e6c508 1px, transparent 1px),
-    linear-gradient(90deg, #b1e6c508 1px, transparent 1px),
-    radial-gradient(ellipse at 75% 40%, #b1e6c51c, #13171500 75%);
+    linear-gradient(#b1e6c510 1px, transparent 1px),
+    linear-gradient(90deg, #b1e6c510 1px, transparent 1px),
+    radial-gradient(ellipse at 75% 40%, #b1e6c52c, #13171500 75%);
   background-size:
     42px 42px,
     42px 42px,
     auto;
-  mask-image: radial-gradient(
-    ellipse farthest-side at 50% 50%,
-    #000 20%,
-    #000000b3 65%,
-    transparent 100%
-  );
+  mask-image:
+    linear-gradient(180deg, #000 0%, #000 65%, transparent 100%),
+    linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-composite: intersect;
 }
 .topofield-background canvas {
   display: none;
@@ -40,13 +63,16 @@
 .topofield-background[data-renderer="webgl"] canvas {
   display: block;
 }
-@media (min-width: 701px) {
-  .overview-topofield-host {
-    min-height: 240px;
-  }
-}
 @media (max-width: 700px) {
+  .overview-topofield-composition {
+    padding-top: 20px;
+  }
+  .overview-topofield-composition .welcome-panel,
+  .overview-topofield-composition .summary {
+    background: #171b19f0;
+  }
   .topofield-background {
-    inset: -8px 0;
+    inset-inline: 12px;
+    height: 400px;
   }
 }

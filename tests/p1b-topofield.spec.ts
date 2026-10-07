@@ -85,14 +85,25 @@ test("Overview has real decorative WebGL, routes unmount it and release resource
   await audit(page);
   await page.goto("/");
   await expect(background(page)).toHaveAttribute("data-renderer", "webgl");
+  await expect(page.locator(".dashboard-content")).toHaveCSS("opacity", "1");
   const region = await background(page).boundingBox();
-  expect(region!.height).toBeGreaterThanOrEqual(220);
-  expect(region!.height).toBeLessThanOrEqual(300);
-  await expect(background(page)).toHaveCSS("opacity", "0.36");
-  await expect(page.locator(".overview-topofield-host")).toHaveCSS(
-    "min-height",
-    "240px",
-  );
+  expect(region!.height).toBeCloseTo(520, 1);
+  await expect(background(page)).toHaveCSS("opacity", "0.4");
+  const heading = await page.locator(".page-heading").boundingBox();
+  const welcome = await page.locator(".welcome-panel").boundingBox();
+  expect(heading!.height).toBeLessThan(130);
+  expect(welcome!.y - heading!.y - heading!.height).toBeLessThanOrEqual(20);
+  expect(region!.y + region!.height).toBeGreaterThan(welcome!.y + 200);
+  await info.attach("composition-geometry.json", {
+    body: JSON.stringify({
+      heading,
+      welcome,
+      background: region,
+      gap: welcome!.y - heading!.y - heading!.height,
+    }),
+    contentType: "application/json",
+  });
+  await expect(page.locator(".dashboard-content")).toHaveCSS("opacity", "1");
   await expect(background(page)).toHaveAttribute("aria-hidden", "true");
   await expect(background(page).locator("canvas")).toHaveAttribute(
     "aria-hidden",
@@ -218,13 +229,13 @@ test("hidden and offscreen pause, visibility resumes; resize reuses one program"
   await expect(background(page)).toHaveAttribute("data-animation", "running");
   await page.evaluate(() => {
     document.querySelector<HTMLElement>(
-      ".overview-topofield-host",
+      ".overview-topofield-composition",
     )!.style.transform = "translateY(-2000px)";
   });
   await expect(background(page)).toHaveAttribute("data-animation", "paused");
   await page.evaluate(() => {
     document.querySelector<HTMLElement>(
-      ".overview-topofield-host",
+      ".overview-topofield-composition",
     )!.style.transform = "";
   });
   await expect(background(page)).toHaveAttribute("data-animation", "running");

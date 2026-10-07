@@ -276,16 +276,14 @@ function FinanceApp({
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25 }}
-        className="dashboard-content"
+        className={
+          page === "overview"
+            ? "dashboard-content overview-topofield-composition"
+            : "dashboard-content"
+        }
       >
-        <div
-          className={
-            page === "overview"
-              ? "page-heading overview-topofield-host"
-              : "page-heading"
-          }
-        >
-          {page === "overview" && <TopoFieldBackground />}
+        {page === "overview" && <TopoFieldBackground />}
+        <div className="page-heading">
           <div>
             <span className="eyebrow">SEU DINHEIRO, COM PERSPECTIVA</span>
             <h1>

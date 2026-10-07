@@ -126,3 +126,32 @@ Arquivos: `TopoFieldBackground.css`, `TopoFieldBackground.tsx`, `topoFieldShader
 
 Commit solicitado: `fix: reforca presenca visual do TopoField`.
 Componente 3 não iniciado. Worktrees principal/B1/B2 intactos; sem merge/cloud/auth/Supabase.
+
+## Reintegração da composição superior — 07/10/2026, base 1d839de
+
+Branch `feat/p1b-topofield`; checkpoint inicialmente limpo. Este ajuste atualiza a composição e os parâmetros dos registros anteriores, sem iniciar componente 3.
+
+O mesmo canvas passou do `page-heading` para a `dashboard-content` existente, somente na Overview. Continua absoluto/decorativo; sua área de 520px no desktop cobre o heading e o início do primeiro bloco, sem reservar espaço no fluxo. Sem novo hero/container financeiro, novos KPIs, textos ou calculadores.
+
+Removida a altura mínima de 240px. Padding superior da Overview 35→24px no desktop (24px efetivos também no mobile); margin do heading 28→18px; welcome margin-top 32→0px. Padding do empty state 5vw/até 70px→3vw/até 40px, mantendo mínimo de 24px. Na captura desktop 1280px, heading 97,5px; gap heading→welcome 18px; topo do primeiro bloco 214,5px (antes cerca de 382px). O conteúdo permanece em seu fluxo normal.
+
+A camada é compartilhada com o primeiro bloco via superfícies grafite com transparência em gradiente, borda mint discreta e texto protegido por superfície mais opaca à esquerda. O resumo financeiro mantém grid, dimensões internas, tipografia, valores e cálculos; muda apenas fundo/borda. As curvas continuam visualmente através dos limites entre o heading e o primeiro bloco. Fade lateral e inferior evita retângulo solto. Nos gráficos e demais cards não há mudança.
+
+Opacity 0,36→0,40 (limite já existente preservado); intensidade dos contornos 0,85→1; borda da curva mais definida (`smoothstep 0.01/0.045`); escala espacial 0,65→0,85. Mint/grafite, density 6 e speed 0,025 preservados. Não foi adicionado glow/blur CSS, neon ou dependência.
+
+Inspecionadas capturas finais reais da Overview vazia/com receita sintética de R$ 1.200, sidebar aberta/fechada, reduced motion e mobile. Background claramente perceptível; primeiro bloco próximo do topo e integrado; textos/CTAs legíveis. Composição alinhada ao pedido de linguagem da referência; não se declara cópia exata de uma demo cujo código/URL completo não foi fornecido.
+
+Evidências: `%TEMP%\vertice-topofield-composition-20261007\directed`, `composition-geometry.json` e `frame-comparison.json`. PNGs e resultados gerados não fazem parte do commit. A amostra dirigida registrou cadência RAF aproximada 165,08fps com efeito e 165,02 sem; p95 6,20ms em ambos, buffer 1.188×520, DPR 1. ACEITÁVEL no ambiente medido; não certifica GPU/mobile físico ou uso percentual de CPU.
+
+Renderer/lifecycle inalterados: o diff TSX altera somente opacity padrão. WebGL direto, shaders/program não recompilados por rerender, pause hidden/offscreen, cleanup, DPR/largura limitada, draw cap, reduced motion estático e fallback por falha do WebGL continuam. Até 700px há fallback CSS e superfície mais opaca para leitura, sem criar WebGL no carregamento mobile.
+
+Testes alterados somente em `p1b-topofield.spec.ts`: nova região sobrepõe o primeiro bloco; heading compacto/gap até 20px; opacity 0,4; seletor do host atualizado; geometria anexada. Usada tolerância de subpixel, sem teste de pixels exatos. Nenhum teste financeiro alterado ou skip novo.
+
+Resultados desta reintegração: **Unit 673/673 PASS**, **Build PASS**, **Dirigidos P1a/P1b 13/13 PASS**, **E2E 372/372 PASS, zero skips/falhas/flaky, 9,3min**, **Prettier e git diff --check PASS**. Build inclui tsc/Vite/PWA; permanece apenas o aviso preexistente do chunk ExcelJS. Sem scripts separados de lint/typecheck.
+
+Arquivos do commit: `src/App.tsx`, `TopoFieldBackground.css`, `TopoFieldBackground.tsx`, `topoFieldShaders.ts`, `tests/p1b-topofield.spec.ts` e este relatório. PNGs rastreados regenerados pelos E2E são repostos aos bytes do checkpoint antes do staging.
+
+P1a/sidebar, B1/B2, Money/CivilDate, authority/CAS/lease, IndexedDB/migration, restore/backup, repository e regras financeiras intactos. Principal/B1/B2/rural/Supabase não alterados. Sem merge ou outras integrações.
+
+Commit solicitado: `fix: integra melhor o TopoField ao layout da Overview`.
+Componente 3 não iniciado; bloqueadores da entrega: nenhum.
