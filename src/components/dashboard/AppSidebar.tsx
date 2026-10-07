@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeftRight, LayoutDashboard, Settings2 } from "lucide-react";
 import type { Page } from "../../hooks/usePage";
@@ -24,13 +24,24 @@ export function AppSidebar({ page }: { page: Page }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function cancelClose() {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }
+  useEffect(() => cancelClose, []);
   const reduced = useReducedMotion();
   const expanded = hovered || focused || pinned;
-  const transition = { duration: reduced ? 0 : 0.2, ease: "easeOut" as const };
+  const ease = [0.22, 1, 0.36, 1] as const;
+  const transition = { duration: reduced ? 0 : expanded ? 0.3 : 0.24, ease };
   const labelMotion = {
     initial: false as const,
-    animate: { opacity: expanded ? 1 : 0, x: expanded || reduced ? 0 : -5 },
-    transition,
+    animate: { opacity: expanded ? 1 : 0, x: expanded || reduced ? 0 : -4 },
+    transition: {
+      duration: reduced ? 0 : expanded ? 0.2 : 0.12,
+      delay: expanded && !reduced ? 0.04 : 0,
+      ease,
+    },
   };
 
   return (
@@ -42,12 +53,22 @@ export function AppSidebar({ page }: { page: Page }) {
       animate={{ width: expanded ? 240 : 52 }}
       transition={transition}
       onPointerEnter={(event) => {
-        if (event.pointerType === "mouse") setHovered(true);
+        if (event.pointerType === "mouse") {
+          cancelClose();
+          setHovered(true);
+        }
       }}
       onPointerLeave={(event) => {
         if (event.pointerType === "mouse") {
-          setHovered(false);
-          setPinned(false);
+          cancelClose();
+          closeTimer.current = setTimeout(
+            () => {
+              closeTimer.current = null;
+              setHovered(false);
+              setPinned(false);
+            },
+            reduced ? 0 : 100,
+          );
         }
       }}
       onFocusCapture={(event) =>

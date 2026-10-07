@@ -11,9 +11,9 @@ interface TopoFieldProps {
 
 /** Decorative only: no financial data or persistence. */
 export function TopoFieldBackground({
-  speed = 0.025,
-  density = 6,
-  opacity = 0.4,
+  speed = 1,
+  density = 1,
+  opacity = 1,
   className = "",
 }: TopoFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,6 +40,8 @@ export function TopoFieldBackground({
     let resolution: WebGLUniformLocation | null = null;
     let clock: WebGLUniformLocation | null = null;
     let contours: WebGLUniformLocation | null = null;
+    let pixelRatio: WebGLUniformLocation | null = null;
+    let drawingDpr = 1;
 
     function stop() {
       cancelAnimationFrame(frame);
@@ -68,8 +70,9 @@ export function TopoFieldBackground({
       gl.uniform1f(clock, time);
       gl.uniform1f(
         contours,
-        Math.min(18, Math.max(3, parameters.current.density)),
+        Math.min(2.5, Math.max(0.25, parameters.current.density)),
       );
+      gl.uniform1f(pixelRatio, drawingDpr);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     function animateTopoField(now: number) {
@@ -88,7 +91,7 @@ export function TopoFieldBackground({
       if (previous)
         time +=
           Math.min((now - previous) / 1000, 0.1) *
-          Math.min(0.1, Math.max(0, parameters.current.speed));
+          Math.min(3, Math.max(0, parameters.current.speed));
       previous = now;
       // At most 30 WebGL draws/s, with no allocation in this callback.
       if (now - lastDraw >= 1000 / 30) {
@@ -99,7 +102,20 @@ export function TopoFieldBackground({
     }
     function synchronize() {
       stop();
-      if (failed || disposed) return;
+      if (disposed) return;
+      // Cover the heading/toolbar and the first existing visual block, without layout padding.
+      const composition = layer.parentElement!;
+      const firstBlock = composition.querySelector<HTMLElement>(
+        ".welcome-panel, .summary, .empty-state",
+      );
+      const heading = composition.querySelector<HTMLElement>(".page-heading");
+      const bottom = (firstBlock ?? heading)?.getBoundingClientRect().bottom;
+      if (bottom !== undefined) {
+        layer.style.height =
+          Math.ceil(bottom - composition.getBoundingClientRect().top + 24) +
+          "px";
+      }
+      if (failed) return;
       if (small.matches) {
         layer.dataset.renderer = "fallback";
         return;
@@ -107,7 +123,7 @@ export function TopoFieldBackground({
       if (!gl) {
         try {
           gl = canvas.getContext("webgl", {
-            alpha: true,
+            alpha: false,
             premultipliedAlpha: false,
             antialias: false,
             depth: false,
@@ -147,9 +163,10 @@ export function TopoFieldBackground({
           const position = gl.getAttribLocation(program, "position");
           gl.enableVertexAttribArray(position);
           gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
-          resolution = gl.getUniformLocation(program, "resolution");
-          clock = gl.getUniformLocation(program, "time");
+          resolution = gl.getUniformLocation(program, "u_resolution");
+          clock = gl.getUniformLocation(program, "u_time");
           contours = gl.getUniformLocation(program, "density");
+          pixelRatio = gl.getUniformLocation(program, "u_dpr");
         } catch {
           fallback();
           return;
@@ -162,6 +179,7 @@ export function TopoFieldBackground({
         1.25,
         1536 / Math.max(1, bounds.width),
       );
+      drawingDpr = dpr;
       canvas.width = Math.max(1, Math.round(bounds.width * dpr));
       canvas.height = Math.max(1, Math.round(bounds.height * dpr));
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -184,6 +202,7 @@ export function TopoFieldBackground({
     small.addEventListener("change", synchronize);
     const resize = new ResizeObserver(synchronize);
     resize.observe(layer);
+    resize.observe(layer.parentElement!);
     const intersection = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
       synchronize();
@@ -216,7 +235,7 @@ export function TopoFieldBackground({
     <div
       ref={layerRef}
       className={"topofield-background " + className}
-      style={{ opacity: Math.min(0.4, Math.max(0, opacity)) }}
+      style={{ opacity: Math.min(1, Math.max(0, opacity)) }}
       aria-hidden="true"
       data-renderer="fallback"
       data-animation="paused"

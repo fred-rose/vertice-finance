@@ -185,3 +185,73 @@ test("desktop touch can expand using the brand button", async ({
     await context.close();
   }
 });
+
+test("brief mouseleave is cancelled on return, and keyboard focus survives delayed close", async ({
+  page,
+}, info) => {
+  await page.goto("/");
+  const sidebar = page.locator(".app-sidebar");
+  await sidebar.hover();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(240);
+  const iconBefore = await sidebar
+    .locator(".app-sidebar-link svg")
+    .first()
+    .boundingBox();
+  const states = await sidebar.evaluate(async (element) => {
+    const leave = () =>
+      element.dispatchEvent(
+        new PointerEvent("pointerout", {
+          pointerType: "mouse",
+          bubbles: true,
+          relatedTarget: document.body,
+        }),
+      );
+    const enter = () =>
+      element.dispatchEvent(
+        new PointerEvent("pointerover", {
+          pointerType: "mouse",
+          bubbles: true,
+          relatedTarget: document.body,
+        }),
+      );
+    const pause = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+    leave();
+    await pause(50);
+    const duringDelay = element.getAttribute("data-expanded");
+    enter();
+    await pause(150);
+    const afterReturn = element.getAttribute("data-expanded");
+    leave();
+    await pause(160);
+    const afterDeparture = element.getAttribute("data-expanded");
+    enter();
+    await pause(350);
+    return { duringDelay, afterReturn, afterDeparture };
+  });
+  expect(states).toEqual({
+    duringDelay: "true",
+    afterReturn: "true",
+    afterDeparture: "false",
+  });
+  await sidebar.getByRole("link", { name: "Visão Geral" }).focus();
+  await page.mouse.move(600, 200);
+  await page.waitForTimeout(160);
+  await expect(sidebar).toHaveAttribute("data-expanded", "true");
+  await page.locator("#main").focus();
+  await expect(sidebar).toHaveAttribute("data-expanded", "false");
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(52);
+  const iconAfter = await sidebar
+    .locator(".app-sidebar-link svg")
+    .first()
+    .boundingBox();
+  expect(iconAfter!.x).toBeCloseTo(iconBefore!.x, 1);
+  await expect(sidebar.locator(".app-sidebar-label").first()).toHaveCSS(
+    "flex-shrink",
+    "0",
+  );
+  await info.attach("mouseleave-states.json", {
+    body: JSON.stringify(states),
+    contentType: "application/json",
+  });
+});

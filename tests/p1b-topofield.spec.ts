@@ -87,13 +87,19 @@ test("Overview has real decorative WebGL, routes unmount it and release resource
   await expect(background(page)).toHaveAttribute("data-renderer", "webgl");
   await expect(page.locator(".dashboard-content")).toHaveCSS("opacity", "1");
   const region = await background(page).boundingBox();
-  expect(region!.height).toBeCloseTo(520, 1);
-  await expect(background(page)).toHaveCSS("opacity", "0.4");
+  expect(region!.width).toBeCloseTo(
+    (await page.locator(".dashboard-content").boundingBox())!.width,
+    1,
+  );
+  await expect(background(page)).toHaveCSS("opacity", "1");
   const heading = await page.locator(".page-heading").boundingBox();
   const welcome = await page.locator(".welcome-panel").boundingBox();
   expect(heading!.height).toBeLessThan(130);
   expect(welcome!.y - heading!.y - heading!.height).toBeLessThanOrEqual(20);
-  expect(region!.y + region!.height).toBeGreaterThan(welcome!.y + 200);
+  expect(region!.y + region!.height).toBeCloseTo(
+    welcome!.y + welcome!.height + 24,
+    0,
+  );
   await info.attach("composition-geometry.json", {
     body: JSON.stringify({
       heading,
@@ -264,6 +270,17 @@ test("small viewport uses static fallback without allocating WebGL and preserves
   await expect(background(page)).toHaveAttribute("data-renderer", "fallback");
   await expect(background(page)).toHaveAttribute("data-animation", "paused");
   expect(await page.evaluate(() => window.topoAudit.programs)).toBe(0);
+  await expect(background(page)).toHaveCSS(
+    "background-size",
+    "48px 48px, 48px 48px, cover",
+  );
+  const contoursLoaded = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = "/topofield-static.svg";
+    await image.decode();
+    return image.naturalWidth > 0 && image.naturalHeight > 0;
+  });
+  expect(contoursLoaded).toBe(true);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(375);

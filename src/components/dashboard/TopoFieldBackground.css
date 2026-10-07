@@ -13,12 +13,12 @@
 .overview-topofield-composition .welcome-panel {
   margin-top: 0;
   padding: clamp(24px, 3vw, 40px);
-  border-color: #b1e6c526;
+  border-color: #ffffff20;
   background: linear-gradient(
     110deg,
-    #151a17f2 0%,
-    #151a17d6 45%,
-    #151a1766 100%
+    #151817b8 0%,
+    #15181780 45%,
+    #15181726 100%
   );
 }
 .overview-topofield-composition .summary {
@@ -32,33 +32,52 @@
 }
 .topofield-background {
   position: absolute;
-  inset: 0 20px auto;
-  height: 520px;
+  inset: 0 0 auto;
+  /* Measured from the first visual block; adds no space to the composition. */
+  height: 100%;
   z-index: 0;
   overflow: hidden;
-  border-radius: 12px;
   pointer-events: none;
-  background:
-    linear-gradient(#b1e6c510 1px, transparent 1px),
-    linear-gradient(90deg, #b1e6c510 1px, transparent 1px),
-    radial-gradient(ellipse at 75% 40%, #b1e6c52c, #13171500 75%);
+  background-color: #000;
+  background-image:
+    linear-gradient(#ffffff1f 1px, transparent 1px),
+    linear-gradient(90deg, #ffffff1f 1px, transparent 1px),
+    url("/topofield-static.svg");
   background-size:
-    42px 42px,
-    42px 42px,
-    auto;
-  mask-image:
-    linear-gradient(180deg, #000 0%, #000 65%, transparent 100%),
-    linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-  mask-composite: intersect;
+    48px 48px,
+    48px 48px,
+    cover;
+  background-position:
+    left bottom,
+    left bottom,
+    center;
+  background-repeat: repeat, repeat, no-repeat;
+}
+.topofield-background::before,
+.topofield-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+.topofield-background::before {
+  background: linear-gradient(180deg, #00000080, transparent 50%, #000);
+}
+.topofield-background::after {
+  background: radial-gradient(circle at center, transparent 0%, #000 100%);
+  opacity: 0.9;
 }
 .topofield-background canvas {
   display: none;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
 .topofield-background[data-renderer="webgl"] {
-  background: none;
+  background: #000;
 }
 .topofield-background[data-renderer="webgl"] canvas {
   display: block;
@@ -67,12 +86,7 @@
   .overview-topofield-composition {
     padding-top: 20px;
   }
-  .overview-topofield-composition .welcome-panel,
   .overview-topofield-composition .summary {
     background: #171b19f0;
-  }
-  .topofield-background {
-    inset-inline: 12px;
-    height: 400px;
   }
 }
