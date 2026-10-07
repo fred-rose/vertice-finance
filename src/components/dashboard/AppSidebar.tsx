@@ -4,6 +4,9 @@ import { ArrowLeftRight, LayoutDashboard, Settings2 } from "lucide-react";
 import type { Page } from "../../hooks/usePage";
 import "./AppSidebar.css";
 
+// Reference: 15rem / 3.05rem at its 16px root. Vértice keeps its own 14px typography.
+const widths = { open: 240, closed: 48.8 };
+
 const links = [
   { page: "overview", href: "#/", label: "Visão Geral", icon: LayoutDashboard },
   {
@@ -33,16 +36,22 @@ export function AppSidebar({ page }: { page: Page }) {
   const reduced = useReducedMotion();
   const expanded = hovered || focused || pinned;
   const ease = [0.22, 1, 0.36, 1] as const;
-  const transition = { duration: reduced ? 0 : expanded ? 0.3 : 0.24, ease };
-  const labelMotion = {
+  const transition = {
+    type: "tween" as const,
+    duration: reduced ? 0 : expanded ? 0.3 : 0.24,
+    ease,
+  };
+  const labelMotion = (order = 0) => ({
     initial: false as const,
     animate: { opacity: expanded ? 1 : 0, x: expanded || reduced ? 0 : -4 },
     transition: {
-      duration: reduced ? 0 : expanded ? 0.2 : 0.12,
-      delay: expanded && !reduced ? 0.04 : 0,
+      type: "tween" as const,
+      duration: reduced ? 0 : 0.2,
+      // Original 30ms stagger; 40ms entrance delay explicitly requested.
+      delay: expanded && !reduced ? 0.04 + order * 0.03 : 0,
       ease,
     },
-  };
+  });
 
   return (
     <motion.aside
@@ -50,7 +59,7 @@ export function AppSidebar({ page }: { page: Page }) {
       aria-label="Barra lateral"
       data-expanded={expanded}
       initial={false}
-      animate={{ width: expanded ? 240 : 52 }}
+      animate={{ width: expanded ? widths.open : widths.closed }}
       transition={transition}
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") {
@@ -93,14 +102,14 @@ export function AppSidebar({ page }: { page: Page }) {
         <motion.div
           className="app-sidebar-brand-copy"
           aria-hidden="true"
-          {...labelMotion}
+          {...labelMotion()}
         >
           <strong>Vértice</strong>
           <small>Pessoal</small>
         </motion.div>
       </div>
       <nav id="app-sidebar-navigation" aria-label="Navegação principal">
-        {links.map(({ page: target, href, label, icon: Icon }) => (
+        {links.map(({ page: target, href, label, icon: Icon }, index) => (
           <a
             key={target}
             href={href}
@@ -113,7 +122,7 @@ export function AppSidebar({ page }: { page: Page }) {
             <motion.span
               className="app-sidebar-label"
               aria-hidden="true"
-              {...labelMotion}
+              {...labelMotion(index + 1)}
             >
               {label}
             </motion.span>

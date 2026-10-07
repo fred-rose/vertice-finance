@@ -228,7 +228,9 @@ test("abre e recarrega offline, grava transações, configurações e importa CS
     .fill("1000");
   // The hover rail overlays this action: leave it and wait for the close tween.
   await page.mouse.move(600, 200);
-  await expect(page.locator(".app-sidebar")).toHaveCSS("width", "52px");
+  await expect
+    .poll(async () => (await page.locator(".app-sidebar").boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
   await page.getByRole("button", { name: "Salvar configurações" }).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Configurações salvas" }),
@@ -402,7 +404,11 @@ for (const kind of ["settings", "transaction", "import", "restore"] as const) {
         .getByRole("link", { name: "Configurações", exact: true })
         .click();
       await page.mouse.move(600, 200);
-      await expect(page.locator(".app-sidebar")).toHaveCSS("width", "52px");
+      await expect
+        .poll(
+          async () => (await page.locator(".app-sidebar").boundingBox())?.width,
+        )
+        .toBeCloseTo(48.8, 1);
       await page
         .getByRole("button", { name: "Restaurar backup JSON", exact: true })
         .click();
@@ -498,7 +504,9 @@ test("A2c busy bloqueia update e fechamento durante leitura real de arquivo", as
   await waitingUpdate(page);
   await page.getByRole("link", { name: "Configurações", exact: true }).click();
   await page.mouse.move(600, 200);
-  await expect(page.locator(".app-sidebar")).toHaveCSS("width", "52px");
+  await expect
+    .poll(async () => (await page.locator(".app-sidebar").boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
   await page
     .getByRole("button", { name: "Restaurar backup JSON", exact: true })
     .click();

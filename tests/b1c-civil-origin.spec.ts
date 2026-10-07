@@ -297,7 +297,9 @@ test("restore A1 real mantém unknown, source explícito, timestamps raw e extra
   await page.getByRole("link", { name: "Configurações", exact: true }).click();
   // Leave the overlay rail before interacting with the settings underneath.
   await page.mouse.move(600, 200);
-  await expect(page.locator(".app-sidebar")).toHaveCSS("width", "52px");
+  await expect
+    .poll(async () => (await page.locator(".app-sidebar").boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
   const original = [
     { ...row(), extra: { lossless: "000123" } },
     { ...row("import"), id: "import", createdAt: "2026-09-10T09:00:00-03:00" },

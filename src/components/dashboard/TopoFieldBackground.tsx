@@ -3,23 +3,17 @@ import { fragmentShader, vertexShader } from "./topoFieldShaders";
 import "./TopoFieldBackground.css";
 
 interface TopoFieldProps {
-  speed?: number;
-  density?: number;
   opacity?: number;
   className?: string;
 }
 
 /** Decorative only: no financial data or persistence. */
 export function TopoFieldBackground({
-  speed = 1,
-  density = 1,
   opacity = 1,
   className = "",
 }: TopoFieldProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
-  const parameters = useRef({ speed, density });
-  const synchronizeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -39,7 +33,6 @@ export function TopoFieldBackground({
     let lastDraw = 0;
     let resolution: WebGLUniformLocation | null = null;
     let clock: WebGLUniformLocation | null = null;
-    let contours: WebGLUniformLocation | null = null;
     let pixelRatio: WebGLUniformLocation | null = null;
     let drawingDpr = 1;
 
@@ -68,10 +61,6 @@ export function TopoFieldBackground({
       if (!gl || !program || failed || disposed) return;
       gl.uniform2f(resolution, canvas.width, canvas.height);
       gl.uniform1f(clock, time);
-      gl.uniform1f(
-        contours,
-        Math.min(2.5, Math.max(0.25, parameters.current.density)),
-      );
       gl.uniform1f(pixelRatio, drawingDpr);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
@@ -88,10 +77,8 @@ export function TopoFieldBackground({
         stop();
         return;
       }
-      if (previous)
-        time +=
-          Math.min((now - previous) / 1000, 0.1) *
-          Math.min(3, Math.max(0, parameters.current.speed));
+      // Active elapsed seconds, exactly the reference clock rate; pauses reset previous.
+      if (previous) time += (now - previous) * 0.001;
       previous = now;
       // At most 30 WebGL draws/s, with no allocation in this callback.
       if (now - lastDraw >= 1000 / 30) {
@@ -165,7 +152,6 @@ export function TopoFieldBackground({
           gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
           resolution = gl.getUniformLocation(program, "u_resolution");
           clock = gl.getUniformLocation(program, "u_time");
-          contours = gl.getUniformLocation(program, "density");
           pixelRatio = gl.getUniformLocation(program, "u_dpr");
         } catch {
           fallback();
@@ -186,7 +172,7 @@ export function TopoFieldBackground({
       layer.dataset.renderer = "webgl";
       if (document.hidden || !visible) return;
       draw();
-      if (!reduced.matches && parameters.current.speed > 0) {
+      if (!reduced.matches) {
         layer.dataset.animation = "running";
         frame = requestAnimationFrame(animateTopoField);
       }
@@ -208,7 +194,6 @@ export function TopoFieldBackground({
       synchronize();
     });
     intersection.observe(layer);
-    synchronizeRef.current = synchronize;
     synchronize();
     return () => {
       disposed = true;
@@ -220,16 +205,10 @@ export function TopoFieldBackground({
       window.removeEventListener("resize", synchronize);
       reduced.removeEventListener("change", synchronize);
       small.removeEventListener("change", synchronize);
-      synchronizeRef.current = null;
       release();
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, []);
-
-  useEffect(() => {
-    parameters.current = { speed, density };
-    synchronizeRef.current?.();
-  }, [speed, density]);
 
   return (
     <div

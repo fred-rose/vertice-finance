@@ -37,7 +37,6 @@ precision mediump float;
                 uniform vec2 u_resolution;
                 uniform float u_time;
                 uniform float u_dpr;
-                uniform float density;
 
                 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
                 float snoise(vec2 v){
@@ -73,7 +72,7 @@ precision mediump float;
                     float noiseScale = 1.4;
                     vec2 noisePos = st * noiseScale + vec2(u_time * 0.015, u_time * 0.025);
                     float n = snoise(noisePos) * 0.5 + 0.5;
-                    float numBands = 10.0 * density;
+                    float numBands = 10.0;
                     float bandVal = n * numBands;
                     float triangleWave = abs(fract(bandVal) - 0.5) * 2.0;
 

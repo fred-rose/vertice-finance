@@ -6,7 +6,9 @@ test("sidebar starts collapsed, overlays without shift and collapses on mouse le
   await page.goto("/");
   const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
   await expect(sidebar).toHaveAttribute("data-expanded", "false");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(52);
+  await expect
+    .poll(async () => (await sidebar.boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
   const mainBefore = await page.locator("#main").boundingBox();
   await page.screenshot({
     path: info.outputPath("sidebar-collapsed.png"),
@@ -33,7 +35,9 @@ test("sidebar starts collapsed, overlays without shift and collapses on mouse le
   await sidebar.getByRole("link", { name: "Transações" }).click();
   await page.mouse.move(600, 200);
   await expect(sidebar).toHaveAttribute("data-expanded", "false");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(52);
+  await expect
+    .poll(async () => (await sidebar.boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
 });
 
 test("real routes, active item and accessible names survive collapsed navigation", async ({
@@ -58,7 +62,7 @@ test("real routes, active item and accessible names survive collapsed navigation
       .poll(
         async () => (await page.locator(".app-sidebar").boundingBox())?.width,
       )
-      .toBe(52);
+      .toBeCloseTo(48.8, 1);
     await page.screenshot({
       path: info.outputPath(label + ".png"),
       fullPage: true,
@@ -240,7 +244,9 @@ test("brief mouseleave is cancelled on return, and keyboard focus survives delay
   await expect(sidebar).toHaveAttribute("data-expanded", "true");
   await page.locator("#main").focus();
   await expect(sidebar).toHaveAttribute("data-expanded", "false");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(52);
+  await expect
+    .poll(async () => (await sidebar.boundingBox())?.width)
+    .toBeCloseTo(48.8, 1);
   const iconAfter = await sidebar
     .locator(".app-sidebar-link svg")
     .first()
