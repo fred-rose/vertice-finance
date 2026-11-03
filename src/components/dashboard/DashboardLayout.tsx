@@ -1,6 +1,6 @@
 ﻿import type { ReactNode } from "react";
 import type { Page } from "../../hooks/usePage";
-import { AppSidebar } from "./AppSidebar";
+import { SessionNavBar } from "../ui/sidebar";
 
 export function DashboardLayout({
   children,
@@ -22,7 +22,7 @@ export function DashboardLayout({
       >
         Ir para o conteúdo
       </a>
-      <AppSidebar page={page} />
+      <SessionNavBar page={page} />
       <main id="main" tabIndex={-1} className="main-content">
         {children}
       </main>

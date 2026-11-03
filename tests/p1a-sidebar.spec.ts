@@ -1,78 +1,44 @@
-﻿import { expect, test } from "./helpers/appTest";
+import { expect, test } from "./helpers/appTest";
 
-test("sidebar starts collapsed, overlays without shift and collapses on mouse leave", async ({
+test("supplied sidebar expands over content and preserves the real routes", async ({
   page,
 }, info) => {
   await page.goto("/");
   const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
+  const nav = sidebar.getByRole("navigation", { name: "Navegação principal" });
   await expect(sidebar).toHaveAttribute("data-expanded", "false");
   await expect
-    .poll(async () => (await sidebar.boundingBox())?.width)
+    .poll(async () => (await sidebar.boundingBox())!.width)
     .toBeCloseTo(48.8, 1);
   const mainBefore = await page.locator("#main").boundingBox();
-  await page.screenshot({
-    path: info.outputPath("sidebar-collapsed.png"),
-    fullPage: true,
-  });
   await sidebar.hover();
   await expect(sidebar).toHaveAttribute("data-expanded", "true");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(240);
-  expect((await page.locator("#main").boundingBox())?.x).toBe(mainBefore?.x);
-  await expect(sidebar.locator(".app-sidebar-label").first()).toHaveCSS(
-    "opacity",
-    "1",
-  );
-  const settings = await sidebar
-    .getByRole("link", { name: "Configurações" })
-    .boundingBox();
-  expect(settings!.y + settings!.height).toBeGreaterThan(
-    (await sidebar.boundingBox())!.height - 30,
-  );
+  await expect.poll(async () => (await sidebar.boundingBox())!.width).toBe(240);
+  expect((await page.locator("#main").boundingBox())!.x).toBe(mainBefore!.x);
+  await expect(nav.getByRole("link")).toHaveCount(3);
   await page.screenshot({
     path: info.outputPath("sidebar-expanded.png"),
     fullPage: true,
   });
-  await sidebar.getByRole("link", { name: "Transações" }).click();
-  await page.mouse.move(600, 200);
-  await expect(sidebar).toHaveAttribute("data-expanded", "false");
-  await expect
-    .poll(async () => (await sidebar.boundingBox())?.width)
-    .toBeCloseTo(48.8, 1);
-});
-
-test("real routes, active item and accessible names survive collapsed navigation", async ({
-  page,
-}, info) => {
-  await page.goto("/");
-  const nav = page.getByRole("navigation", { name: "Navegação principal" });
-  await expect(nav.getByRole("link")).toHaveCount(3);
   for (const [label, hash] of [
     ["Transações", "#/transacoes"],
     ["Configurações", "#/configuracoes"],
     ["Visão Geral", "#/"],
   ]) {
-    await nav.getByRole("link", { name: label, exact: true }).click();
+    const link = nav.getByRole("link", { name: label, exact: true });
+    await link.click();
     await expect(page).toHaveURL(new RegExp(hash + "$"));
-    await expect(
-      nav.getByRole("link", { name: label, exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(link).toHaveAttribute("aria-current", "page");
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
-    await page.mouse.move(600, 200);
-    await expect
-      .poll(
-        async () => (await page.locator(".app-sidebar").boundingBox())?.width,
-      )
-      .toBeCloseTo(48.8, 1);
-    await page.screenshot({
-      path: info.outputPath(label + ".png"),
-      fullPage: true,
-    });
   }
+  await page.locator("#main").focus();
+  await page.mouse.move(600, 200);
+  await expect(sidebar).toHaveAttribute("data-expanded", "false");
 });
 
-test("keyboard focus expands and follows the hash router, then collapses outside", async ({
+test("keyboard navigation expands the sidebar and dropdowns dismiss with Escape", async ({
   page,
-}, info) => {
+}) => {
   await page.goto("/");
   const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
   await page.keyboard.press("Tab");
@@ -80,55 +46,140 @@ test("keyboard focus expands and follows the hash router, then collapses outside
     page.getByRole("link", { name: "Ir para o conteúdo" }),
   ).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(sidebar.getByRole("button")).toBeFocused();
+  await expect(
+    sidebar.getByRole("button", { name: "Menu do Vértice" }),
+  ).toBeFocused();
   await expect(sidebar).toHaveAttribute("data-expanded", "true");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(
+    sidebar.getByRole("button", { name: "Menu do Vértice" }),
+  ).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(
     sidebar.getByRole("link", { name: "Visão Geral" }),
   ).toBeFocused();
   await page.keyboard.press("Tab");
-  const transactions = sidebar.getByRole("link", { name: "Transações" });
-  await expect(transactions).toBeFocused();
-  await expect(transactions).toHaveCSS("outline-style", "solid");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(240);
-  await expect(transactions.locator(".app-sidebar-label")).toHaveCSS(
-    "opacity",
-    "1",
-  );
-  await page.screenshot({
-    path: info.outputPath("keyboard-focus.png"),
-    fullPage: true,
-  });
+  await expect(sidebar.getByRole("link", { name: "Transações" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/transacoes$/);
-  await page.keyboard.press("Tab");
-  await expect(
-    sidebar.getByRole("link", { name: "Configurações" }),
-  ).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#\/configuracoes$/);
-  await page.keyboard.press("Tab");
+  await page.locator("#main").focus();
   await expect(sidebar).toHaveAttribute("data-expanded", "false");
 });
 
-test("reduced motion keeps hover and keyboard navigation functional", async ({
-  page,
-}) => {
+test("reduced motion preserves navigation", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
   await sidebar.hover();
   await expect(sidebar).toHaveAttribute("data-expanded", "true");
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(240);
-  await sidebar.getByRole("link", { name: "Configurações" }).focus();
-  await page.keyboard.press("Enter");
+  await sidebar.getByRole("button", { name: "Menu pessoal" }).click();
+  await expect(page.getByRole("menu")).toHaveCSS("animation-name", "none");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await sidebar
+    .getByRole("link", { name: "Configurações", exact: true })
+    .click();
   await expect(page).toHaveURL(/#\/configuracoes$/);
-  await page.locator("#main").focus();
-  await page.mouse.move(600, 200);
-  await expect(sidebar).toHaveAttribute("data-expanded", "false");
 });
 
-test("mobile touch preserves all current routes without hover", async ({
+test("reference scale and CSS isolation include portaled menus", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
+  const trigger = sidebar.getByRole("button", { name: "Menu do Vértice" });
+  const link = sidebar.getByRole("link", { name: "Visão Geral", exact: true });
+  await expect(page.locator("html")).toHaveCSS("font-size", "14px");
+  await expect(sidebar).toHaveCSS("font-size", "16px");
+  await expect(link).toHaveCSS("height", "32px");
+  await expect(link).toHaveCSS("padding-left", "8px");
+  await expect(link.locator("svg")).toHaveCSS("width", "16px");
+  await expect(trigger).toHaveCSS("height", "36px");
+  await expect(trigger).toHaveCSS("font-size", "14px");
+  await expect(trigger).toHaveCSS("font-weight", "500");
+  await expect(trigger).toHaveCSS(
+    "transition-property",
+    "color, background-color, border-color, box-shadow",
+  );
+  await link.focus();
+  await expect(link).toHaveCSS("outline-color", "rgb(163, 163, 163)");
+  await trigger.hover();
+  await page.mouse.down();
+  await expect(trigger).toHaveCSS("transform", "none");
+  await page.mouse.up();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveCSS("font-size", "16px");
+  await expect(menu).toHaveCSS("min-width", "128px");
+  await expect(menu.getByRole("menuitem")).toHaveCSS("font-size", "14px");
+  await expect(menu.getByRole("menuitem")).toHaveCSS("padding-left", "8px");
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  // A real overflow exercises the scrollbar's transparent border, too.
+  await page.setViewportSize({ width: 1100, height: 180 });
+  await sidebar.hover();
+  const scrollArea = sidebar
+    .locator("[data-radix-scroll-area-viewport]")
+    .locator("..");
+  await scrollArea.hover();
+  await expect(sidebar.locator('[data-orientation="vertical"]')).toHaveCSS(
+    "border-left-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(page.locator("html")).toHaveCSS("font-size", "14px");
+});
+
+test("both dropdowns animate fade, zoom and directional slide on enter and exit", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const animationNames = await page.evaluateHandle(() => {
+    const names: string[] = [];
+    document.addEventListener("animationstart", (event) => {
+      if (
+        (event.target as HTMLElement).classList.contains("vertice-sidebar-menu")
+      )
+        names.push(event.animationName);
+    });
+    return names;
+  });
+  const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
+  for (const name of ["Menu do Vértice", "Menu pessoal"]) {
+    await sidebar.getByRole("button", { name }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toHaveCSS("animation-name", "vertice-sidebar-enter");
+    await expect(menu).toHaveCSS("animation-duration", "0.15s");
+    const frames = await menu.evaluate((element) =>
+      element.getAnimations()[0].effect!.getKeyframes(),
+    );
+    expect(frames[0].opacity).toBe("0");
+    expect(frames[0].transform).toContain("0.95");
+    expect(frames[0].transform).toMatch(/-?8px/);
+    expect(frames[frames.length - 1].opacity).toBe("1");
+    await expect
+      .poll(
+        async () =>
+          (await animationNames.jsonValue()).filter(
+            (value) => value === "vertice-sidebar-enter",
+          ).length,
+      )
+      .toBe(name === "Menu do Vértice" ? 1 : 2);
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name })).toBeFocused();
+  }
+  expect(await animationNames.jsonValue()).toEqual([
+    "vertice-sidebar-enter",
+    "vertice-sidebar-exit",
+    "vertice-sidebar-enter",
+    "vertice-sidebar-exit",
+  ]);
+});
+
+test("touch supports menus and existing routes on mobile", async ({
   browser,
   baseURL,
 }, info) => {
@@ -141,22 +192,27 @@ test("mobile touch preserves all current routes without hover", async ({
   const page = await context.newPage();
   try {
     await page.goto("/");
-    const nav = page.getByRole("navigation", { name: "Navegação principal" });
-    await expect(nav).toBeVisible();
+    const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
+    await sidebar.getByRole("button", { name: "Menu do Vértice" }).tap();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page
+      .getByRole("menuitem", { name: "Configurações", exact: true })
+      .tap();
+    await expect(page).toHaveURL(/#\/configuracoes$/);
+    const nav = sidebar.getByRole("navigation", {
+      name: "Navegação principal",
+    });
     for (const label of ["Transações", "Configurações", "Visão Geral"]) {
       const link = nav.getByRole("link", { name: label, exact: true });
       await link.tap();
       await expect(link).toHaveAttribute("aria-current", "page");
-      await expect(link.locator(".app-sidebar-label")).toHaveCSS(
-        "opacity",
-        "1",
-      );
     }
+    await expect(sidebar).toHaveAttribute("data-expanded", "false");
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(320);
     await page.screenshot({
-      path: info.outputPath("mobile.png"),
+      path: info.outputPath("sidebar-mobile.png"),
       fullPage: true,
     });
   } finally {
@@ -164,100 +220,26 @@ test("mobile touch preserves all current routes without hover", async ({
   }
 });
 
-test("desktop touch can expand using the brand button", async ({
-  browser,
-  baseURL,
-}) => {
-  const context = await browser.newContext({
-    baseURL,
-    viewport: { width: 1100, height: 800 },
-    hasTouch: true,
-  });
-  const page = await context.newPage();
-  try {
-    await page.goto("/");
-    const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
-    const toggle = sidebar.getByRole("button");
-    await expect(sidebar).toHaveAttribute("data-expanded", "false");
-    await toggle.tap();
-    await expect(sidebar).toHaveAttribute("data-expanded", "true");
-    await toggle.tap();
-    await expect(sidebar).toHaveAttribute("data-expanded", "false");
-    await sidebar.getByRole("link", { name: "Transações" }).tap();
-    await expect(page).toHaveURL(/#\/transacoes$/);
-  } finally {
-    await context.close();
-  }
-});
-
-test("brief mouseleave is cancelled on return, and keyboard focus survives delayed close", async ({
+test("sidebar and portaled menus share light and dark tokens", async ({
   page,
-}, info) => {
+}) => {
   await page.goto("/");
-  const sidebar = page.locator(".app-sidebar");
-  await sidebar.hover();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(240);
-  const iconBefore = await sidebar
-    .locator(".app-sidebar-link svg")
-    .first()
-    .boundingBox();
-  const states = await sidebar.evaluate(async (element) => {
-    const leave = () =>
-      element.dispatchEvent(
-        new PointerEvent("pointerout", {
-          pointerType: "mouse",
-          bubbles: true,
-          relatedTarget: document.body,
-        }),
-      );
-    const enter = () =>
-      element.dispatchEvent(
-        new PointerEvent("pointerover", {
-          pointerType: "mouse",
-          bubbles: true,
-          relatedTarget: document.body,
-        }),
-      );
-    const pause = (ms: number) =>
-      new Promise((resolve) => setTimeout(resolve, ms));
-    leave();
-    await pause(50);
-    const duringDelay = element.getAttribute("data-expanded");
-    enter();
-    await pause(150);
-    const afterReturn = element.getAttribute("data-expanded");
-    leave();
-    await pause(160);
-    const afterDeparture = element.getAttribute("data-expanded");
-    enter();
-    await pause(350);
-    return { duringDelay, afterReturn, afterDeparture };
-  });
-  expect(states).toEqual({
-    duringDelay: "true",
-    afterReturn: "true",
-    afterDeparture: "false",
-  });
-  await sidebar.getByRole("link", { name: "Visão Geral" }).focus();
-  await page.mouse.move(600, 200);
-  await page.waitForTimeout(160);
-  await expect(sidebar).toHaveAttribute("data-expanded", "true");
-  await page.locator("#main").focus();
-  await expect(sidebar).toHaveAttribute("data-expanded", "false");
-  await expect
-    .poll(async () => (await sidebar.boundingBox())?.width)
-    .toBeCloseTo(48.8, 1);
-  const iconAfter = await sidebar
-    .locator(".app-sidebar-link svg")
-    .first()
-    .boundingBox();
-  expect(iconAfter!.x).toBeCloseTo(iconBefore!.x, 1);
-  await expect(sidebar.locator(".app-sidebar-label").first()).toHaveCSS(
-    "flex-shrink",
-    "0",
+  const sidebar = page.getByRole("complementary", { name: "Barra lateral" });
+  const surface = sidebar.locator(":scope > div");
+  await expect(surface).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
+  await expect(surface).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await sidebar.getByRole("button", { name: "Menu pessoal" }).click();
+  await expect(page.getByRole("menu")).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
   );
-  await info.attach("mouseleave-states.json", {
-    body: JSON.stringify(states),
-    contentType: "application/json",
-  });
+  await page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+  await expect(surface).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(page.getByRole("menu")).toHaveCSS(
+    "background-color",
+    "rgb(10, 10, 10)",
+  );
+  await page.getByRole("menuitem", { name: "Configurações pessoais" }).click();
+  await expect(page).toHaveURL(/#\/configuracoes$/);
 });

@@ -1,0 +1,158 @@
+/* Theme tokens are scoped to the supplied sidebar and its Radix portals. */
+.vertice-sidebar,
+.vertice-sidebar-menu {
+  /* Tailwind spacing and typography inherit a local 16px reference scale. */
+  --spacing: 4px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  font-size: 16px;
+  line-height: 24px;
+  --background: #000;
+  --foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --primary: #fafafa;
+  --primary-foreground: #171717;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --border: #262626;
+  --input: #262626;
+  --ring: #a3a3a3;
+  --popover: #0a0a0a;
+  --popover-foreground: #fafafa;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  --destructive: #dc2626;
+  --destructive-foreground: #fff;
+  color-scheme: dark;
+  border-color: var(--border);
+}
+:root[data-theme="light"] :is(.vertice-sidebar, .vertice-sidebar-menu),
+:root.light :is(.vertice-sidebar, .vertice-sidebar-menu) {
+  --background: #fff;
+  --foreground: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --popover: #fff;
+  --popover-foreground: #0a0a0a;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  color-scheme: light;
+}
+.vertice-sidebar {
+  top: env(safe-area-inset-top);
+  left: env(safe-area-inset-left);
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+:is(.vertice-sidebar, .vertice-sidebar-menu)
+  :is(.border, .border-b, .border-r) {
+  border-color: var(--border);
+}
+.app-layout > .main-content {
+  margin-left: 48.8px;
+}
+.vertice-sidebar-menu {
+  z-index: 50;
+  min-width: 128px;
+}
+.vertice-sidebar a:hover {
+  color: var(--primary);
+}
+.vertice-sidebar a[aria-current="page"] {
+  color: #2563eb;
+}
+
+/* Override only the legacy element rules that reach this component. */
+:is(.vertice-sidebar, .vertice-sidebar-menu) button {
+  font: inherit;
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+:is(.vertice-sidebar, .vertice-sidebar-menu) button.text-sm {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+:is(.vertice-sidebar, .vertice-sidebar-menu) button:not(:disabled):active {
+  transform: none;
+}
+:is(.vertice-sidebar, .vertice-sidebar-menu) :is(a, button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.vertice-sidebar button[class~="focus-visible:outline-none"]:focus-visible {
+  outline-color: transparent;
+}
+.vertice-sidebar-menu a:focus {
+  color: var(--accent-foreground);
+}
+:is(.vertice-sidebar, .vertice-sidebar-menu) .rounded {
+  border-radius: 4px;
+}
+
+/* Original shadcn fade/zoom/slide utilities, scoped to Sidebar portals. */
+.vertice-sidebar-menu[data-side="bottom"] {
+  --sidebar-slide-y: -8px;
+}
+.vertice-sidebar-menu[data-side="top"] {
+  --sidebar-slide-y: 8px;
+}
+.vertice-sidebar-menu[data-side="left"] {
+  --sidebar-slide-x: 8px;
+}
+.vertice-sidebar-menu[data-side="right"] {
+  --sidebar-slide-x: -8px;
+}
+.vertice-sidebar-menu[data-state="open"] {
+  animation: vertice-sidebar-enter 150ms ease-out both;
+}
+.vertice-sidebar-menu[data-state="closed"] {
+  animation: vertice-sidebar-exit 150ms ease-out both;
+}
+@keyframes vertice-sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(
+        var(--sidebar-slide-x, 0px),
+        var(--sidebar-slide-y, 0px),
+        0
+      )
+      scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+@keyframes vertice-sidebar-exit {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(
+        var(--sidebar-slide-x, 0px),
+        var(--sidebar-slide-y, 0px),
+        0
+      )
+      scale(0.95);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vertice-sidebar-menu[data-state] {
+    animation: none;
+  }
+}
