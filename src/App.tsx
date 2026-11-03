@@ -8,7 +8,7 @@ import {
   Plus,
 } from "lucide-react";
 import { DashboardLayout } from "./components/dashboard/DashboardLayout";
-import { TopoFieldBackground } from "./components/dashboard/TopoFieldBackground";
+import TopoField from "./components/ui/topo-field";
 import { OverviewPage } from "./components/dashboard/OverviewPage";
 import { TransactionsPage } from "./components/transactions/TransactionsPage";
 import { AddTransactionModal } from "./components/transactions/AddTransactionModal";
@@ -282,7 +282,9 @@ function FinanceApp({
             : "dashboard-content"
         }
       >
-        {page === "overview" && <TopoFieldBackground />}
+        {page === "overview" && (
+          <TopoField mode="auto" className="topofield-background" />
+        )}
         <div className="page-heading">
           <div>
             <span className="eyebrow">SEU DINHEIRO, COM PERSPECTIVA</span>

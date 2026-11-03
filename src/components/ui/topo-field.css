@@ -1,0 +1,40 @@
+.dashboard-content.overview-topofield-composition {
+  position: relative;
+  isolation: isolate;
+  padding-top: 24px;
+}
+.overview-topofield-composition > :not(.topofield-background) {
+  position: relative;
+  z-index: 1;
+}
+.overview-topofield-composition > .page-heading {
+  margin-bottom: 18px;
+}
+.overview-topofield-composition .welcome-panel {
+  margin-top: 0;
+  padding: clamp(24px, 3vw, 40px);
+}
+.overview-topofield-composition > .topofield-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Keep the existing heading readable when the isolated background uses paper/ink. */
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .overview-topofield-composition
+  > .page-heading {
+  color: #1e293b;
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .overview-topofield-composition
+  > .page-heading
+  :is(p, .eyebrow, .month-selector) {
+  color: #475569;
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .overview-topofield-composition
+  .month-selector {
+  border-color: #cbd5e1;
+}
