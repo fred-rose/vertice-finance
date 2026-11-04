@@ -12,6 +12,7 @@ import {
 import { MoneyError } from "../../utils/money";
 import { summarize } from "../../features/dashboard/calculations";
 import { downloadTransactions } from "../../features/transactions/importExport";
+import "./TransactionsPage.css";
 export function TransactionsPage({
   transactions,
   revision,

@@ -279,10 +279,12 @@ function FinanceApp({
         className={
           page === "overview"
             ? "dashboard-content overview-topofield-composition"
-            : "dashboard-content"
+            : page === "transactions"
+              ? "dashboard-content overview-topofield-composition transactions-topofield-composition"
+              : "dashboard-content"
         }
       >
-        {page === "overview" && (
+        {(page === "overview" || page === "transactions") && (
           <TopoField mode="auto" className="topofield-background" />
         )}
         <div className="page-heading">

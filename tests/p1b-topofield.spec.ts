@@ -179,7 +179,7 @@ test("mobile keeps the original animated WebGL at device resolution and all rout
   });
   for (const label of ["Transações", "Configurações"]) {
     await page.getByRole("link", { name: label, exact: true }).click();
-    await expect(background(page)).toHaveCount(0);
+    await expect(background(page)).toHaveCount(label === "Transações" ? 1 : 0);
     await page.getByRole("link", { name: "Visão Geral", exact: true }).click();
     await expect(canvas(page)).toBeVisible();
   }

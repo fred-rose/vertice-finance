@@ -1,0 +1,449 @@
+/* Reuse the shared composition veil with quieter contours around the opaque table. */
+.dashboard-content.transactions-topofield-composition {
+  --overview-field-content: rgb(16 18 18 / 80%);
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .dashboard-content.transactions-topofield-composition {
+  --overview-field-content: rgb(245 245 245 / 78%);
+}
+
+/* Local to this page and dialogs opened while the Transactions route is mounted. */
+:is(
+  .transactions-page,
+  .app-layout:has(.transactions-page) .transaction-dialog
+) {
+  --tx-surface: #171717;
+  --tx-raised: #1c1c1c;
+  --tx-hover: #232323;
+  --tx-foreground: #f5f5f5;
+  --tx-muted: #a3a3a3;
+  --tx-subtle: #858585;
+  --tx-border: #303030;
+  --tx-accent: #b1e6c5;
+  --tx-highlight: #ffffff04;
+  --tx-danger: #fda4af;
+  color: var(--tx-foreground);
+  color-scheme: dark;
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  :is(
+    .transactions-page,
+    .app-layout:has(.transactions-page) .transaction-dialog
+  ) {
+  --tx-surface: #ffffff;
+  --tx-raised: #f7f7f7;
+  --tx-hover: #f0f0f0;
+  --tx-foreground: #171717;
+  --tx-muted: #636363;
+  --tx-subtle: #737373;
+  --tx-border: #e5e5e5;
+  --tx-accent: #287451;
+  --tx-highlight: #ffffff80;
+  --tx-danger: #be123c;
+  color-scheme: light;
+}
+.transactions-page.panel {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--tx-border);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, var(--tx-highlight), transparent 56px),
+    var(--tx-surface);
+  box-shadow:
+    inset 0 1px 0 var(--tx-highlight),
+    0 2px 8px -4px #00000024;
+}
+.transactions-page > .section-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.transactions-page > .section-heading > div:first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.transactions-page .section-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+  color: var(--tx-foreground);
+}
+.transactions-page .section-heading p {
+  margin: 8px 0 0;
+  max-width: 550px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--tx-muted);
+}
+.transactions-page > .section-heading > .row-actions {
+  gap: 10px;
+}
+:is(.transactions-page, .app-layout:has(.transactions-page) .transaction-dialog)
+  .secondary-button {
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 1px solid var(--tx-border);
+  border-radius: 12px;
+  background: var(--tx-raised);
+  color: var(--tx-foreground);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  transition:
+    background-color 150ms,
+    border-color 150ms;
+}
+:is(.transactions-page, .app-layout:has(.transactions-page) .transaction-dialog)
+  .secondary-button:not(:disabled):hover {
+  background: var(--tx-hover);
+  border-color: var(--tx-subtle);
+}
+.transactions-page .secondary-button:disabled {
+  opacity: 0.4;
+}
+.transactions-page .transaction-filters {
+  grid-template-columns: minmax(200px, 1.8fr) repeat(4, minmax(120px, 1fr));
+  gap: 16px;
+  margin: 24px 0 0;
+  padding: 20px;
+  border: 1px solid var(--tx-border);
+  border-radius: 20px;
+  background: var(--tx-raised);
+}
+.transactions-page .transaction-filters label {
+  display: block;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--tx-muted);
+}
+.transactions-page .transaction-filters label > span {
+  min-height: 18px;
+  gap: 6px;
+}
+.transactions-page .transaction-filters :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--tx-border);
+  border-radius: 11px;
+  background: var(--tx-surface);
+  color: var(--tx-foreground);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color 150ms;
+}
+.transactions-page .transaction-filters input[type="month"] {
+  min-inline-size: 0;
+}
+.transactions-page .transaction-filters :is(input, select):hover {
+  border-color: var(--tx-subtle);
+}
+.transactions-page :is(input, select, button, a):focus-visible {
+  outline: 2px solid var(--tx-accent);
+  outline-offset: 3px;
+}
+.transactions-page .filter-summary {
+  margin: 20px 0;
+  padding: 0 2px;
+  color: var(--tx-foreground);
+  font-size: 13px;
+  line-height: 1.9;
+  font-variant-numeric: tabular-nums;
+}
+.transactions-page .filter-summary > span {
+  margin-top: 6px;
+  color: var(--tx-muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.transactions-page > .table-scroll {
+  max-width: 100%;
+  border: 1px solid var(--tx-border);
+  border-radius: 18px;
+  background: var(--tx-surface);
+  scrollbar-width: thin;
+  scrollbar-color: var(--tx-border) var(--tx-surface);
+}
+.transactions-page table {
+  width: 100%;
+  min-width: 900px;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.transactions-page th {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--tx-border);
+  background: var(--tx-raised);
+  color: var(--tx-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.7px;
+  text-align: left;
+}
+.transactions-page td {
+  padding: 18px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--tx-border);
+  color: var(--tx-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  vertical-align: middle;
+}
+.transactions-page tbody tr:last-child td {
+  border-bottom: 0;
+}
+.transactions-page tbody tr {
+  transition: background-color 150ms;
+}
+.transactions-page tbody tr:hover {
+  background: var(--tx-raised);
+}
+.transactions-page .table-scroll :is(th, td):last-child {
+  padding-right: 16px;
+}
+.transactions-page th:nth-child(5),
+.transactions-page th:last-child,
+.transactions-page .transaction-value {
+  text-align: right;
+}
+.transactions-page .transaction-value {
+  color: var(--tx-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.transactions-page .text-mint {
+  color: var(--tx-accent) !important;
+}
+.transactions-page .danger-text {
+  color: var(--tx-danger) !important;
+}
+.transactions-page .transaction-description {
+  min-width: 210px;
+  max-width: 340px;
+  padding-right: 8px;
+  gap: 12px;
+  color: var(--tx-foreground);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.transactions-page .transaction-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--tx-border);
+  border-radius: 11px;
+  background: var(--tx-raised);
+  color: var(--tx-muted);
+}
+.transactions-page .transaction-icon.income {
+  color: var(--tx-accent);
+}
+.transactions-page .table-category {
+  padding: 5px 8px;
+  border: 1px solid var(--tx-border);
+  border-radius: 8px;
+  background: var(--tx-raised);
+  color: var(--tx-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.transactions-page td .row-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.transactions-page .row-actions .icon-button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--tx-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--tx-muted);
+}
+.transactions-page .row-actions .icon-button:not(:disabled):hover {
+  border-color: var(--tx-subtle);
+  background: var(--tx-hover);
+  color: var(--tx-foreground);
+}
+.transactions-page > .empty-state {
+  display: grid;
+  place-content: center;
+  min-height: 220px;
+  margin: 24px 0 0;
+  padding: 32px;
+  border: 1px dashed var(--tx-border);
+  border-radius: 20px;
+  background: var(--tx-raised);
+  color: var(--tx-muted);
+  font-size: 14px;
+  line-height: 1.8;
+  text-align: center;
+  text-wrap: balance;
+}
+.transactions-page .pagination {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--tx-border);
+  color: var(--tx-muted);
+  font-size: 12px;
+}
+.transactions-page .pagination > button:first-child {
+  justify-self: start;
+}
+.transactions-page .pagination > button:last-child {
+  justify-self: end;
+}
+
+/* Dialog styling is route-bound; shared dialog markup and behavior stay intact. */
+.app-layout:has(.transactions-page) .transaction-dialog {
+  border-color: var(--tx-border);
+  border-radius: 24px;
+  background: var(--tx-surface);
+  color: var(--tx-foreground);
+  box-shadow: 0 24px 80px #00000038;
+}
+.app-layout:has(.transactions-page) .transaction-dialog::backdrop {
+  background: #000000a6;
+}
+.app-layout:has(.transactions-page)
+  .transaction-dialog
+  :is(.dialog-description, .form-note, form label) {
+  color: var(--tx-muted);
+}
+.app-layout:has(.transactions-page)
+  .transaction-dialog
+  :is(input:not([type="checkbox"]), select) {
+  border-color: var(--tx-border);
+  border-radius: 11px;
+  background: var(--tx-raised);
+  color: var(--tx-foreground);
+}
+.app-layout:has(.transactions-page) .transaction-dialog .type-selector {
+  border-color: var(--tx-border);
+  border-radius: 12px;
+  background: var(--tx-raised);
+}
+.app-layout:has(.transactions-page) .transaction-dialog .type-selector button {
+  color: var(--tx-muted);
+}
+.app-layout:has(.transactions-page)
+  .transaction-dialog
+  .type-selector
+  button.selected {
+  background: var(--tx-hover);
+  color: var(--tx-accent);
+}
+.app-layout:has(.transactions-page)
+  .transaction-dialog
+  :is(button, input, select):focus-visible {
+  outline-color: var(--tx-accent);
+}
+
+@media (max-width: 1100px) {
+  .transactions-page .transaction-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .transactions-page .transaction-filters > label:first-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 639px) {
+  .transactions-page.panel {
+    padding: 20px;
+  }
+  .transactions-page .section-heading > .row-actions {
+    width: 100%;
+  }
+  .transactions-page .section-heading > .row-actions > button {
+    flex: 1 1 130px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .transactions-page .transaction-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+    gap: 16px;
+    border-radius: 16px;
+  }
+  .transactions-page .transaction-filters > label:first-child {
+    grid-column: auto;
+  }
+  .transactions-page .transaction-filters :is(input, select) {
+    min-height: 46px;
+  }
+  .transactions-page .filter-summary {
+    font-size: 12px;
+  }
+  .transactions-page table {
+    min-width: 820px;
+  }
+  .transactions-page td {
+    padding: 16px 12px;
+  }
+  .transactions-page th {
+    padding: 13px 12px;
+  }
+  .transactions-page .table-scroll :is(th, td):last-child {
+    padding-right: 12px;
+  }
+  .transactions-page .row-actions .icon-button {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+  }
+  .transactions-page .pagination {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .transactions-page .pagination > span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    text-align: center;
+  }
+  .transactions-page .pagination > button {
+    grid-row: 2;
+    justify-self: stretch;
+    width: 100%;
+    min-height: 44px;
+  }
+  .transactions-page .pagination > button:first-child {
+    justify-self: stretch;
+  }
+  .transactions-page .pagination > button:last-child {
+    justify-self: stretch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .transactions-page .transaction-filters :is(input, select),
+  :is(
+      .transactions-page,
+      .app-layout:has(.transactions-page) .transaction-dialog
+    )
+    .secondary-button,
+  .transactions-page button,
+  .transactions-page tbody tr {
+    transition: none;
+  }
+}
