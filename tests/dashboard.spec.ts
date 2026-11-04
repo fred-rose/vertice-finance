@@ -501,7 +501,8 @@ test("responsividade, navegação mobile e foco do modal", async ({ page }) => {
           },
         )
         .toBe(true);
-      await page.mouse.move(0, 0);
+      // Leave the chart inside the content area; x=0 would hover-expand the Sidebar.
+      await page.mouse.move(width - 10, 10);
     }
     if (width === 390) {
       await page.screenshot({

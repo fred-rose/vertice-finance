@@ -1,4 +1,11 @@
-import { Utensils, Car, Sparkles, Repeat2, Shapes } from "lucide-react";
+import {
+  Utensils,
+  Car,
+  Sparkles,
+  Repeat2,
+  Shapes,
+  PieChart,
+} from "lucide-react";
 import type { aggregateCategories } from "../../features/dashboard/calculations";
 import { changeLabel, moneyFromCalculation as money } from "../../utils/format";
 const icons = {
@@ -14,11 +21,19 @@ export function CategoryBreakdown({
   data: ReturnType<typeof aggregateCategories>;
 }) {
   return (
-    <section className="panel categories-panel">
+    <section
+      className="panel categories-panel overview-lower-card"
+      aria-label="Gastos por categoria"
+    >
       <div className="section-heading">
-        <div>
-          <h2>Para onde vai seu dinheiro</h2>
-          <p>Gastos por categoria neste mês.</p>
+        <div className="overview-section-title">
+          <span className="overview-section-icon" aria-hidden="true">
+            <PieChart size={19} />
+          </span>
+          <div>
+            <h2>Para onde vai seu dinheiro</h2>
+            <p>Gastos por categoria neste mês.</p>
+          </div>
         </div>
       </div>
       <div className="category-stacked" aria-hidden="true">
