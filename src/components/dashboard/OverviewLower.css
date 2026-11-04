@@ -1,4 +1,45 @@
 /* Presentation tokens are local to the lower Overview; the Bento and background renderer are untouched. */
+/* Composition veil: after the renderer at z=0, below the existing content at z=1. */
+.dashboard-content.overview-topofield-composition {
+  --overview-field-edge: #101212;
+  --overview-field-heading: rgb(16 18 18 / 48%);
+  --overview-field-content: rgb(16 18 18 / 70%);
+  --overview-field-heading-stop: 96px;
+  --overview-field-content-stop: 320px;
+  --overview-field-footer-fade: 140px;
+}
+.dashboard-content.overview-topofield-composition::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--overview-field-edge),
+    var(--overview-field-heading) var(--overview-field-heading-stop),
+    var(--overview-field-content) var(--overview-field-content-stop),
+    var(--overview-field-content) calc(100% - var(--overview-field-footer-fade)),
+    var(--overview-field-edge)
+  );
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .dashboard-content.overview-topofield-composition {
+  --overview-field-edge: #eef1f6;
+  --overview-field-heading: rgb(245 245 245 / 44%);
+  --overview-field-content: rgb(245 245 245 / 68%);
+}
+.overview-topofield-composition .overview-details::before {
+  content: none;
+}
+@media (max-width: 639px) {
+  .dashboard-content.overview-topofield-composition {
+    --overview-field-heading-stop: 120px;
+    --overview-field-content-stop: 300px;
+    --overview-field-footer-fade: 96px;
+  }
+}
+
 .overview-details,
 .overview-lower-card {
   --ov-surface: #171717;
