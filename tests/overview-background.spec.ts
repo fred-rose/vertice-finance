@@ -49,6 +49,11 @@ for (const theme of ["dark", "light"] as const) {
       "",
     );
     await expect(frame.locator("#topo-canvas")).toBeVisible();
+    // The ready marker can still belong to the previous srcDoc after a theme change.
+    await expect(frame.locator("body")).toHaveCSS(
+      "background-color",
+      theme === "light" ? "rgb(238, 241, 246)" : "rgb(0, 0, 0)",
+    );
     await expect(page.locator(".ab-root > .grid > section").first()).toHaveCSS(
       "opacity",
       "1",
@@ -93,16 +98,53 @@ for (const theme of ["dark", "light"] as const) {
         )
         .toBe(true);
       await expect(composition).toHaveCSS("opacity", "1");
-      await expect(composition).toHaveScreenshot(
-        `overview-background-${theme}-${device}.png`,
-        {
+      // Capturing a tall element outside the viewport makes Chromium temporarily
+      // resize the sandboxed iframe during Page.captureScreenshot. Its static
+      // WebGL buffer can then be captured between resize and redraw. Fit the
+      // composition vertically so captureBeyondViewport is unnecessary, while
+      // keeping the device width and the screenshot comparison unchanged.
+      const captureHeight = await composition.evaluate((element) =>
+        Math.ceil(element.getBoundingClientRect().bottom + window.scrollY),
+      );
+      await page.setViewportSize({
+        width,
+        height: Math.max(height, captureHeight),
+      });
+      await expect
+        .poll(async () => {
+          const bounds = (await composition.boundingBox())!;
+          return bounds.height <= page.viewportSize()!.height;
+        })
+        .toBe(true);
+      const options = {
+        animations: "disabled" as const,
+        caret: "hide" as const,
+        style: ".skip-link { visibility: hidden !important; }",
+      };
+      // Also detect capture instability independently of the approved reference.
+      let previousCapture = await composition.screenshot(options);
+      await expect
+        .poll(
+          async () => {
+            const currentCapture = await composition.screenshot(options);
+            const stable = previousCapture.equals(currentCapture);
+            previousCapture = currentCapture;
+            return stable;
+          },
+          {
+            message: `${theme}/${device}: consecutive captures must be identical`,
+          },
+        )
+        .toBe(true);
+      await expect
+        .soft(composition)
+        .toHaveScreenshot(`overview-background-${theme}-${device}.png`, {
           animations: "disabled",
           caret: "hide",
           // Fixed elements are outside this composition and have separate regression tests.
           style: ".skip-link { visibility: hidden !important; }",
           maxDiffPixelRatio: 0.002,
-        },
-      );
+        });
     }
     // The veil stays behind the real content and never intercepts its existing actions.
     await page

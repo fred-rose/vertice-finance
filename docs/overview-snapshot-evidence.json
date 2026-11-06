@@ -1,0 +1,832 @@
+﻿{
+  "recordedOn": "2026-11-04",
+  "commitReview": {
+    "localDate": "2026-11-06",
+    "includedFiles": [
+      "tests/overview-background.spec.ts",
+      "tests/overview-background.spec.ts-snapshots/overview-background-light-mobile-win32.png",
+      "docs/overview-snapshot-evidence.json"
+    ],
+    "excludedFiles": "Desktop reference, generated artifacts and personal reference files remain outside this commit as explicitly requested.",
+    "candidateValidation": {
+      "command": "PLAYWRIGHT_PORT=5187 npx --no-install playwright test tests/overview-background.spec.ts --workers=1 --reporter=line",
+      "method": "Temporarily used the HEAD desktop reference to match the exact commit scope, then restored the pre-existing working desktop reference byte-for-byte in a finally block.",
+      "result": "1 passed, 1 failed: dark desktop/mobile and light mobile comparisons pass; only light desktop fails with 10959 differing pixels out of 3530112 (0.3104%, above the unchanged 0.2% threshold).",
+      "pending": "The corrected light desktop reference is intentionally uncommitted. A clean checkout of this scoped commit retains the documented light desktop failure; the previous all-pass results used the corrected desktop reference in the working tree.",
+      "restoredDesktopSha256": "2c944582913b86a9863684dcbf39077f4f973bb3cc9b4e3a58045f29d5002816"
+    },
+    "productionCodeModified": false,
+    "hooksBypassed": false,
+    "pushRequested": false
+  },
+  "resumedValidation": {
+    "localDate": "2026-11-06",
+    "scope": "light/mobile only; existing working-tree changes preserved",
+    "originalMobileSha256": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+    "originalMethodCaptures": 12,
+    "byteIdenticalOriginalMatches": 5,
+    "originalMethodDistinctHashes": 3,
+    "stableMobileSha256": "15e8cc8ca50d5be15b79c99128349ac0b1c6100808dd235073ceb3a6f7f3770d",
+    "stableMobileMatchesExistingWorkingReference": true,
+    "decision": "Capture artefact confirmed again: the same unmodified application reproduces the original PNG intermittently with the old capture method and produces the existing corrected mobile reference with the stabilized method. The mobile snapshot was already corrected on entry; no additional snapshot rewrite was needed. No other snapshots were updated during this resumed investigation.",
+    "visualCommand": "PLAYWRIGHT_PORT=5187 npx --no-install playwright test tests/overview-background.spec.ts --repeat-each=3 --workers=1 --reporter=line",
+    "visualResult": "6 passed; 12 reference comparisons across both themes and widths, including consecutive-capture equality checks",
+    "interfaceCommand": "PLAYWRIGHT_PORT=5187 npx --no-install playwright test tests/overview-investigation.spec.ts tests/p1a-sidebar.spec.ts tests/p1b-topofield.spec.ts tests/analytics-bento.spec.ts tests/overview-lower.spec.ts --workers=1 --reporter=line",
+    "interfaceResult": "19 passed; temporary diagnostic test removed after collecting hashes",
+    "financialCommand": "npx --no-install vitest run src/features/dashboard/calculations.test.ts src/features/dashboard/calculations.b1b.test.ts src/features/dashboard/calculations.b1c.test.ts src/components/dashboard/financialAnalyticsData.test.ts src/utils/money.test.ts",
+    "financialResult": "207 passed in 5 files",
+    "productionCodeModified": false,
+    "snapshotUpdateModeUsed": false
+  },
+  "finalValidation": {
+    "command": "PLAYWRIGHT_PORT=5187 npx --no-install playwright test tests/overview-background.spec.ts --repeat-each=5 --workers=1 --reporter=line",
+    "result": "10 passed (1.2m)",
+    "coverage": "5 repetitions per theme; desktop and mobile each time; 20 reference comparisons plus consecutive-capture byte equality checks",
+    "diagnosticInstrumentationEnabled": false,
+    "automaticSnapshotUpdateEnabled": false,
+    "referenceHashesVerifiedAgainstDocumentedStableCapture": true,
+    "productionCodeModified": false
+  },
+  "conclusion": "Both light references contain a captureBeyondViewport iframe resize artefact, reproduced byte-for-byte with the original capture method in the same browser session. No application or shader change is needed.",
+  "originalGeneration": {
+    "commit": "9245751f3e90a8be2b7a09787f282a552315ce12",
+    "test": "tests/overview-background.spec.ts",
+    "browserChannel": "msedge",
+    "platform": "win32",
+    "viewport": {
+      "desktop": [1440, 1000],
+      "mobile": [375, 812]
+    },
+    "reducedMotion": "reduce",
+    "fixedDate": "2026-09-15T15:00:00Z",
+    "screenshot": "locator.toHaveScreenshot of the entire tall composition; captureBeyondViewport enabled when its height exceeds viewport",
+    "screenshotTolerance": 0.002,
+    "historicalLimit": "The original browser binary/version and GPU were not recorded. The config has no explicit DPR override; current DPR 1 and exact reproduction of both original PNG hashes establish that different devices/drivers are not required to reproduce the artefacts.",
+    "protectedCodeCompared": "git diff 9245751 HEAD -- src/components/ui/topo-field.tsx src/components/ui/topo-field.css src/components/dashboard/OverviewLower.css src/components/dashboard/OverviewPage.tsx playwright.config.ts package-lock.json: empty"
+  },
+  "method": "Instrumented drawArrays in the test runtime to observe resize/draw dimensions and synchronously read one pixel (timing perturbation, no shader or production-code modifications). Took 12 original-method captures per device, then captured with only parent viewport height increased, retaining device width. Diagnostic instrumentation removed after collection.",
+  "devices": [
+    {
+      "device": "desktop",
+      "stableState": {
+        "requestedViewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "captureViewport": {
+          "width": 1440,
+          "height": 2611
+        },
+        "graphics": {
+          "dpr": 1,
+          "viewport": [1391, 2536],
+          "canvas": [1391, 2536],
+          "resolution": [1391, 2536],
+          "time": 0,
+          "shaderDpr": 1,
+          "contextLost": false,
+          "lightShader": true,
+          "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A7A8) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        },
+        "browser": "156.0.4314.58"
+      },
+      "originalResizeTrace": [
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "resize",
+          "size": [80, 9033]
+        },
+        {
+          "event": "draw",
+          "size": [80, 9033]
+        },
+        {
+          "event": "resize",
+          "size": [1391, 2536]
+        },
+        {
+          "event": "draw",
+          "size": [1391, 2536]
+        }
+      ],
+      "byteIdenticalOriginalReproductions": [
+        {
+          "capture": "light-desktop-original-10.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "capture": "light-desktop-original-2.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "capture": "light-desktop-original-3.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "capture": "light-desktop-original-4.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "capture": "light-desktop-original-5.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "capture": "light-desktop-original-9.png",
+          "sha256": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        }
+      ],
+      "stableCapture": {
+        "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+        "capture": "light-desktop-stable.png",
+        "dimensions": [1392, 2536],
+        "changedPixels": 60384,
+        "channelDeltaOver20": 45197,
+        "maximumDelta": 213,
+        "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+        "shaB": "2c944582913b86a9863684dcbf39077f4f973bb3cc9b4e3a58045f29d5002816"
+      },
+      "playwrightComparisonBeforeUpdate": {
+        "differentPixels": 10959,
+        "totalPixels": 3530112
+      },
+      "originalCaptures": [
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-0.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 912048,
+          "channelDeltaOver20": 827767,
+          "maximumDelta": 138,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "060a7a6da0d555b6fd71b994ea3abec8572db22516ce49f3bf972a1706df36a3"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-1.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 902569,
+          "channelDeltaOver20": 827781,
+          "maximumDelta": 138,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "cf5676387ddd2e344e57ef4f36239d62b63fcd2c26c7406df7824c1330b99ed1"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-10.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-11.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 902569,
+          "channelDeltaOver20": 827781,
+          "maximumDelta": 138,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "cf5676387ddd2e344e57ef4f36239d62b63fcd2c26c7406df7824c1330b99ed1"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-2.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-3.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-4.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-5.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-6.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 902569,
+          "channelDeltaOver20": 827781,
+          "maximumDelta": 138,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "cf5676387ddd2e344e57ef4f36239d62b63fcd2c26c7406df7824c1330b99ed1"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-7.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 58848,
+          "channelDeltaOver20": 43661,
+          "maximumDelta": 116,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "3aed5391690aa0d5ca09195b127866631e9a5a19995c51ad3a57cc858a6189d4"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-8.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 902569,
+          "channelDeltaOver20": 827781,
+          "maximumDelta": 138,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "cf5676387ddd2e344e57ef4f36239d62b63fcd2c26c7406df7824c1330b99ed1"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-desktop-original-9.png",
+          "dimensions": [1392, 2536],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0",
+          "shaB": "88b71fe0d2cec25ec8b9faed11b8ed2ae36e3eb1b505231c11c7ecf33c2b85c0"
+        }
+      ]
+    },
+    {
+      "device": "mobile",
+      "stableState": {
+        "requestedViewport": {
+          "width": 375,
+          "height": 812
+        },
+        "captureViewport": {
+          "width": 375,
+          "height": 4500
+        },
+        "graphics": {
+          "dpr": 1,
+          "viewport": [326, 4499],
+          "canvas": [326, 4499],
+          "resolution": [326, 4499],
+          "time": 0,
+          "shaderDpr": 1,
+          "contextLost": false,
+          "lightShader": true,
+          "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A7A8) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        },
+        "browser": "156.0.4314.58"
+      },
+      "originalResizeTrace": [
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        },
+        {
+          "event": "resize",
+          "size": [36, 7438]
+        },
+        {
+          "event": "draw",
+          "size": [36, 7438]
+        },
+        {
+          "event": "resize",
+          "size": [326, 4499]
+        },
+        {
+          "event": "draw",
+          "size": [326, 4499]
+        }
+      ],
+      "byteIdenticalOriginalReproductions": [
+        {
+          "capture": "light-mobile-original-2.png",
+          "sha256": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "capture": "light-mobile-original-6.png",
+          "sha256": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "capture": "light-mobile-original-8.png",
+          "sha256": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "capture": "light-mobile-original-9.png",
+          "sha256": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        }
+      ],
+      "stableCapture": {
+        "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+        "capture": "light-mobile-stable.png",
+        "dimensions": [327, 4500],
+        "changedPixels": 28544,
+        "channelDeltaOver20": 22771,
+        "maximumDelta": 213,
+        "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+        "shaB": "15e8cc8ca50d5be15b79c99128349ac0b1c6100808dd235073ceb3a6f7f3770d"
+      },
+      "playwrightComparisonBeforeUpdate": {
+        "differentPixels": 7126,
+        "totalPixels": 1471500
+      },
+      "originalCaptures": [
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-0.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-1.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-10.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-11.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-2.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-3.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-4.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-5.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-6.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-7.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 385024,
+          "channelDeltaOver20": 365243,
+          "maximumDelta": 138,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "9247518022211575b7eb71e48417d770b41982013c50b1c29f27097e94f4edea"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-8.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        },
+        {
+          "run": "overview-background-Overvi-028da-on-light-desktop-and-mobile",
+          "capture": "light-mobile-original-9.png",
+          "dimensions": [327, 4500],
+          "changedPixels": 0,
+          "channelDeltaOver20": 0,
+          "maximumDelta": 0,
+          "shaA": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87",
+          "shaB": "abff4fb97720c1392d2b260ceffee42e32a394c6dff779cfd79faa8638137e87"
+        }
+      ]
+    }
+  ],
+  "changesAuthorizedByEvidence": [
+    "tests/overview-background.spec.ts-snapshots/overview-background-light-desktop-win32.png",
+    "tests/overview-background.spec.ts-snapshots/overview-background-light-mobile-win32.png"
+  ],
+  "snapshotsUnaffected": [
+    "overview-background-dark-desktop-win32.png",
+    "overview-background-dark-mobile-win32.png"
+  ]
+}
