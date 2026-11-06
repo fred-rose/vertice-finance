@@ -199,6 +199,7 @@ export function TransactionsPage({
       </p>
       {filtered.length ? (
         <TransactionTable
+          mobileCards
           transactions={filtered.slice(
             (currentPage - 1) * 20,
             currentPage * 20,

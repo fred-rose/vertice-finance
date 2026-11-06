@@ -54,6 +54,9 @@
     inset 0 1px 0 var(--tx-highlight),
     0 2px 8px -4px #00000024;
 }
+.transactions-page .transaction-card-only {
+  display: none;
+}
 .transactions-page > .section-heading {
   align-items: flex-start;
   flex-wrap: wrap;
@@ -396,22 +399,108 @@
   .transactions-page .filter-summary {
     font-size: 12px;
   }
-  .transactions-page table {
-    min-width: 820px;
+  .transactions-page > .transaction-cards {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
   }
-  .transactions-page td {
-    padding: 16px 12px;
+  .transactions-page .transaction-cards table {
+    display: block;
+    min-width: 0;
+    white-space: normal;
   }
-  .transactions-page th {
-    padding: 13px 12px;
+  .transactions-page .transaction-cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
-  .transactions-page .table-scroll :is(th, td):last-child {
-    padding-right: 12px;
+  .transactions-page .transaction-cards tbody {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
   }
-  .transactions-page .row-actions .icon-button {
-    flex-basis: 40px;
-    width: 40px;
-    height: 40px;
+  .transactions-page .transaction-cards tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid var(--tx-border);
+    border-radius: 18px;
+    background: var(--tx-surface);
+  }
+  .transactions-page .transaction-cards td,
+  .transactions-page .transaction-cards td:last-child {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .transactions-page .transaction-cards td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--tx-muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .transactions-page .transaction-cards .transaction-value {
+    grid-row: 2;
+    font-size: 20px;
+    line-height: 1.5;
+    white-space: normal;
+  }
+  .transactions-page .transaction-cards .transaction-description {
+    align-items: flex-start;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    font-size: 14px;
+  }
+  .transactions-page .transaction-cards .table-category {
+    display: inline-block;
+    max-width: 100%;
+  }
+  .transactions-page .transaction-card-only {
+    display: inline;
+  }
+  .transactions-page .transaction-card-status {
+    display: block;
+    margin-top: 6px;
+    color: var(--tx-muted);
+    font-size: 12px;
+    font-weight: 400;
+  }
+  .transactions-page .transaction-cards .demo-tag {
+    display: none;
+  }
+  .transactions-page .transaction-cards td .row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--tx-border);
+  }
+  .transactions-page .transaction-cards .row-actions .icon-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding: 10px 6px;
+    background: var(--tx-raised);
+    color: var(--tx-foreground);
+    font-size: 12px;
+    line-height: 1.5;
   }
   .transactions-page .pagination {
     grid-template-columns: repeat(2, minmax(0, 1fr));
