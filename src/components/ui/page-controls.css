@@ -1,0 +1,279 @@
+/* Page and dialog controls only: the Sidebar and Analytics Bento keep their styles. */
+.app-layout,
+.transaction-dialog {
+  --control-ink: #f5f5f5;
+  --control-surface: #1c1c1c;
+  --control-hover: #242424;
+  --control-border: #303030;
+  --control-muted: #a3a3a3;
+  --control-accent: #b1e6c5;
+  --control-accent-ink: #17271d;
+  --control-danger: #fda4af;
+}
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  :is(.app-layout, .transaction-dialog) {
+  --control-ink: #171717;
+  --control-surface: #f7f7f7;
+  --control-hover: #eeeeee;
+  --control-border: #e5e5e5;
+  --control-muted: #636363;
+  --control-accent: #287451;
+  --control-accent-ink: #ffffff;
+  --control-danger: #be123c;
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .overview-details,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .toast,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  :is(
+    .primary-button,
+    .secondary-button,
+    .danger-button,
+    .icon-button,
+    .text-link,
+    .overview-detail-action
+  ) {
+  min-width: 44px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .overview-details,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .toast,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  :is(
+    .secondary-button,
+    .danger-button,
+    .icon-button,
+    .text-link,
+    .overview-detail-action
+  ) {
+  border: 1px solid var(--control-border);
+  background: var(--control-surface);
+  color: var(--control-ink);
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .overview-details,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  .primary-button {
+  border-color: var(--control-accent);
+  background: var(--control-accent);
+  color: var(--control-accent-ink);
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .overview-details,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .toast,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  :is(
+    .secondary-button,
+    .danger-button,
+    .icon-button,
+    .text-link,
+    .overview-detail-action
+  ):not(:disabled):hover {
+  border-color: var(--control-muted);
+  background: var(--control-hover);
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  .primary-button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--control-accent) 90%, var(--control-ink));
+  filter: none;
+}
+:is(
+    .app-layout
+      .main-content
+      :is(.welcome-panel, .overview-details, .settings-page),
+    .transaction-dialog
+  )
+  :is(.text-link, .overview-detail-action) {
+  display: inline-flex;
+  align-items: center;
+}
+:is(
+    .app-layout
+      .main-content
+      :is(
+        .page-heading,
+        .welcome-panel,
+        .overview-details,
+        .transactions-page,
+        .settings-page,
+        .demo-banner,
+        .toast,
+        .pwa-controls
+      ),
+    .transaction-dialog
+  )
+  :is(button, a, input, select, summary):focus-visible {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
+}
+:is(
+    .app-layout .main-content :is(.transactions-page, .settings-page),
+    .transaction-dialog
+  )
+  :is(input:not([type="checkbox"]), select) {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+:is(
+    .app-layout .main-content :is(.transactions-page, .settings-page),
+    .transaction-dialog
+  )
+  :is(input:not([type="checkbox"]), select):not(:disabled):hover {
+  border-color: var(--control-muted);
+}
+:is(.app-layout .main-content .transaction-dialog, .transaction-dialog)
+  input.amount-input {
+  font-size: 28px;
+}
+:is(
+    .app-layout
+      .main-content
+      :is(.welcome-panel, .overview-details, .settings-page),
+    .transaction-dialog
+  )
+  :is(.text-link, .overview-detail-action) {
+  color: var(--control-accent);
+}
+:is(.app-layout .main-content :is(.settings-page), .transaction-dialog)
+  .danger-button {
+  color: var(--control-danger);
+}
+.app-layout .main-content .settings-page input[type="color"] {
+  padding: 6px;
+}
+:is(.app-layout .main-content :is(.page-heading, .toast), .transaction-dialog)
+  .icon-button {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+}
+@media (min-width: 640px) {
+  .app-layout .transactions-page .row-actions .icon-button {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 12px;
+  }
+}
+.app-layout .transactions-page .transaction-cards .row-actions .icon-button {
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+.app-layout .page-heading .month-selector {
+  height: auto;
+  min-height: 44px;
+  max-width: 100%;
+  gap: 6px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+.app-layout .page-heading .month-selector > span {
+  min-width: 0;
+  white-space: normal;
+}
+.transaction-dialog .type-selector button {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.transaction-dialog .checkbox-label {
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.transaction-dialog .checkbox-label:has(input:focus-visible) {
+  outline: 2px solid var(--control-accent);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+@media (max-width: 700px) {
+  :is(
+      .app-layout .main-content :is(.transactions-page, .settings-page),
+      .transaction-dialog
+    )
+    :is(input:not([type="checkbox"]), select) {
+    font-size: 16px;
+  }
+  :is(.app-layout .main-content .transaction-dialog, .transaction-dialog)
+    input.amount-input {
+    font-size: 28px;
+  }
+}
