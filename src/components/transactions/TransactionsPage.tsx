@@ -1,7 +1,7 @@
 import { LocalConflictError } from "../../services/transactionRepository";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useUnsavedWork } from "../../hooks/useUnsavedWork";
-import { Download, Search, Upload } from "lucide-react";
+import { ChevronDown, Download, Search, Upload } from "lucide-react";
 import type { FinanceSettings, Transaction } from "../../types/finance";
 import { Dialog, DialogClose } from "../ui/Dialog";
 import { TransactionTable, sortTransactions } from "./TransactionTable";
@@ -37,6 +37,11 @@ export function TransactionsPage({
   const [type, setType] = useState("");
   const [account, setAccount] = useState("");
   const [category, setCategory] = useState("");
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const filtersId = useId();
+  const activeFilters = [search.trim(), month, type, account, category].filter(
+    Boolean,
+  ).length;
   const [page, setPage] = useState(1);
   const [deleting, setDeleting] = useState<{
     transaction: Transaction;
@@ -121,66 +126,107 @@ export function TransactionsPage({
             }}
           />
         </label>
-        <label>
-          Mês
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label>
-          Tipo
-          <select
-            value={type}
-            onChange={(e) => {
-              setType(e.target.value);
+        <div className="transaction-filter-toolbar">
+          <button
+            type="button"
+            className="secondary-button transaction-filter-toggle"
+            aria-label={
+              activeFilters
+                ? `Filtros, ${activeFilters} ${activeFilters === 1 ? "ativo" : "ativos"}`
+                : "Filtros"
+            }
+            aria-expanded={filtersExpanded}
+            aria-controls={filtersId}
+            onClick={() => setFiltersExpanded((expanded) => !expanded)}
+          >
+            Filtros
+            <span className="transaction-filter-count" aria-live="polite">
+              {activeFilters || ""}
+            </span>
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!activeFilters}
+            onClick={() => {
+              setSearch("");
+              setMonth("");
+              setType("");
+              setAccount("");
+              setCategory("");
               setPage(1);
             }}
           >
-            <option value="">Todos</option>
-            <option value="expense">Gasto</option>
-            <option value="income">Receita</option>
-            <option value="transfer">Transferência</option>
-          </select>
-        </label>
-        <label>
-          Conta
-          <select
-            value={account}
-            onChange={(e) => {
-              setAccount(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Todas</option>
-            {settings.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Categoria
-          <select
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">Todas</option>
-            {settings.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            Limpar
+          </button>
+        </div>
+        <div
+          id={filtersId}
+          className="transaction-secondary-filters"
+          data-expanded={filtersExpanded}
+        >
+          <label>
+            Mês
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => {
+                setMonth(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label>
+            Tipo
+            <select
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="expense">Gasto</option>
+              <option value="income">Receita</option>
+              <option value="transfer">Transferência</option>
+            </select>
+          </label>
+          <label>
+            Conta
+            <select
+              value={account}
+              onChange={(e) => {
+                setAccount(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todas</option>
+              {settings.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Categoria
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Todas</option>
+              {settings.categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <p className="filter-summary">
         {filtered.length} lançamentos no filtro ·{" "}

@@ -117,6 +117,15 @@
   border-radius: 20px;
   background: var(--tx-raised);
 }
+.transactions-page .transaction-filter-toolbar {
+  display: none;
+}
+.transactions-page .transaction-secondary-filters {
+  display: contents;
+}
+.transactions-page .transaction-filters .transaction-secondary-filters > label {
+  grid-column: auto;
+}
 .transactions-page .transaction-filters label {
   display: block;
   min-width: 0;
@@ -386,9 +395,60 @@
   }
   .transactions-page .transaction-filters {
     grid-template-columns: minmax(0, 1fr);
-    padding: 16px;
-    gap: 16px;
+    padding: 12px;
+    gap: 12px;
     border-radius: 16px;
+  }
+  .transactions-page .transaction-filter-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .transactions-page
+    .transaction-filters
+    .transaction-filter-toolbar
+    > button.secondary-button {
+    min-width: 44px;
+    min-height: 44px;
+    padding-inline: 8px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .transactions-page .transaction-filter-toggle {
+    flex: 1;
+    gap: 6px;
+  }
+  .transactions-page .transaction-filter-toggle svg {
+    flex-shrink: 0;
+  }
+  .transactions-page
+    .transaction-filter-toggle[aria-expanded="true"]
+    > svg:last-child {
+    transform: rotate(180deg);
+  }
+  .transactions-page .transaction-filter-count {
+    min-width: 18px;
+    padding: 2px 5px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--tx-accent) 12%, transparent);
+    color: var(--tx-accent);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+  .transactions-page .transaction-filter-count:empty {
+    display: none;
+  }
+  .transactions-page .transaction-secondary-filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    min-width: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--tx-border);
+  }
+  .transactions-page .transaction-secondary-filters[data-expanded="false"] {
+    display: none;
   }
   .transactions-page .transaction-filters > label:first-child {
     grid-column: auto;
@@ -522,6 +582,11 @@
   }
   .transactions-page .pagination > button:last-child {
     justify-self: stretch;
+  }
+}
+@media (min-width: 480px) and (max-width: 639px) {
+  .transactions-page .transaction-secondary-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -171,6 +171,13 @@ test("responsive neutral surfaces and light/dark themes preserve table actions",
       )
       .toBe(true);
     await expect(panel.getByLabel("Buscar descrição")).toBeVisible();
+    const filtersToggle = panel.getByRole("button", { name: /^Filtros/ });
+    if (
+      width < 640 &&
+      (await filtersToggle.getAttribute("aria-expanded")) === "false"
+    ) {
+      await filtersToggle.click();
+    }
     await expect(
       panel.getByRole("combobox", { name: /^Categoria\b/ }),
     ).toBeVisible();

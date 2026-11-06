@@ -179,6 +179,7 @@ for (const theme of ["dark", "light"] as const) {
           : transaction;
       }),
     );
+    await panel.getByRole("button", { name: "Filtros", exact: true }).click();
     await panel.getByLabel("Mês", { exact: true }).fill("2026-09");
     await panel
       .getByRole("combobox", { name: /^Tipo\b/ })
