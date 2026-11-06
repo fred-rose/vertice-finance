@@ -281,10 +281,12 @@ function FinanceApp({
             ? "dashboard-content overview-topofield-composition"
             : page === "transactions"
               ? "dashboard-content overview-topofield-composition transactions-topofield-composition"
-              : "dashboard-content"
+              : "dashboard-content overview-topofield-composition settings-topofield-composition"
         }
       >
-        {(page === "overview" || page === "transactions") && (
+        {(page === "overview" ||
+          page === "transactions" ||
+          page === "settings") && (
           <TopoField mode="auto" className="topofield-background" />
         )}
         <div className="page-heading">

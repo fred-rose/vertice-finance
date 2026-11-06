@@ -1,4 +1,5 @@
 import { captureCivilCut, type CivilDate } from "../../utils/civil";
+import "./SettingsPage.css";
 import {
   LocalConflictError,
   type WriteReceipt,

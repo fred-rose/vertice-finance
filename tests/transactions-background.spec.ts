@@ -76,7 +76,7 @@ for (const theme of ["dark", "light"] as const) {
       expect(bounds.width).toBeCloseTo(container.width, 1);
       expect(bounds.height).toBeCloseTo(container.height, 1);
     }
-    // Route changes retain one renderer and remove it from Settings.
+    // Route changes retain one renderer in Overview and Settings.
     await page.evaluate(() => {
       location.hash = "/";
     });
@@ -87,6 +87,7 @@ for (const theme of ["dark", "light"] as const) {
     await page.evaluate(() => {
       location.hash = "/configuracoes";
     });
-    await expect(page.locator("iframe.topofield-background")).toHaveCount(0);
+    await expect(page.locator("iframe.topofield-background")).toHaveCount(1);
+    await expect(page.locator(".settings-topofield-composition")).toBeVisible();
   });
 }
