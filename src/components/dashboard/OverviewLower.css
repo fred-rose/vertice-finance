@@ -32,6 +32,17 @@
 .overview-topofield-composition .overview-details::before {
   content: none;
 }
+/* Match the approved light heading ink on the transparent Overview text. */
+:root:is([data-theme="light"], [data-scheme="light"], .light)
+  .overview-topofield-composition
+  :is(
+    .period-context,
+    .insight-heading h2,
+    .insight-heading h2 svg,
+    .insight-grid > .empty-state
+  ) {
+  color: #1e293b;
+}
 @media (max-width: 639px) {
   .dashboard-content.overview-topofield-composition {
     --overview-field-heading-stop: 120px;
