@@ -113,6 +113,9 @@
   align-items: stretch;
   gap: 16px;
 }
+.overview-details .charts-grid > .categories-panel {
+  align-self: start;
+}
 .overview-lower-card.panel {
   min-width: 0;
   padding: 24px;
@@ -292,7 +295,7 @@
   justify-content: center;
 }
 .overview-lower-card .categories-empty-state {
-  min-height: 290px;
+  min-height: 0;
 }
 .overview-lower-card .chart-legend {
   flex-wrap: wrap;

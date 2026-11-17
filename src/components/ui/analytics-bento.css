@@ -45,6 +45,23 @@
   --ab-rev-a: #22d3ee;
   --ab-rev-b: #3bf08c;
 }
+/* Sparse charts use their own content height instead of stretching to a neighbor. */
+.financial-analytics :is(.ab-categories-card, .ab-seasonality-card) {
+  align-self: start;
+}
+.financial-analytics .ab-treemap[data-category-count="0"] {
+  display: grid;
+  align-content: center;
+  height: auto;
+  min-height: 80px;
+}
+.financial-analytics
+  .ab-treemap:is([data-category-count="1"], [data-category-count="2"]) {
+  height: clamp(160px, 20vw, 220px);
+}
+.financial-analytics .ab-radar {
+  max-width: 320px;
+}
 :root:is([data-theme="light"], [data-scheme="light"], .light)
   .financial-analytics
   .ab-root {

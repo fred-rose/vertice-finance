@@ -876,7 +876,8 @@ function Treemap({
   return (
     <div
       ref={ref}
-      className="relative mt-1.5 h-[300px] sm:h-[340px]"
+      className="ab-treemap relative mt-1.5 h-[300px] sm:h-[340px]"
+      data-category-count={items.length}
       role="img"
       aria-label={`${data.title}, ${data.periods[period]?.label}`}
     >
@@ -1089,7 +1090,7 @@ function Radar({
   return (
     <div
       ref={ref}
-      className="mx-auto mt-1.5 w-full max-w-[420px]"
+      className="ab-radar mx-auto mt-1.5 w-full max-w-[420px]"
       style={{ height: S || 300 }}
     >
       {S > 0 && (
@@ -1409,7 +1410,7 @@ export function AnalyticsBento({
 
         {/* categories */}
         <Card
-          className={`col-span-12 lg:col-span-7 ${enter(2)}`}
+          className={`ab-categories-card col-span-12 lg:col-span-7 ${enter(2)}`}
           aria-label={categories.title}
         >
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
@@ -1501,7 +1502,7 @@ export function AnalyticsBento({
 
         {/* seasonality */}
         <Card
-          className={`col-span-12 lg:col-span-5 ${enter(3)}`}
+          className={`ab-seasonality-card col-span-12 lg:col-span-5 ${enter(3)}`}
           aria-label={seasonality.title}
         >
           <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
