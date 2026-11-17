@@ -10,15 +10,13 @@ The project focuses on practical financial management, reliable business rules a
 
 ## Preview
 
-_Add a dashboard screenshot here._
+### Dashboard
 
-```md
 ![Vértice Finance Dashboard](docs/images/dashboard.png)
-```
 
-**Live Demo:** coming soon
+### Transactions
 
----
+![Vértice Finance Transactions](docs/images/transactions.png)
 
 ## Tech Stack
 
