@@ -6,6 +6,7 @@ The project focuses on practical financial management, reliable business rules a
 
 > **Status:** Active development
 
+**Live Demo:** [Open Vértice Finance](https://vertice-finance-sigma.vercel.app)
 ---
 
 ## Preview
